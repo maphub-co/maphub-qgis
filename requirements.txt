@@ -1,0 +1,5 @@
+pb-tool
+pyqt5ac
+setuptools
+
+maphub==0.1.2
