@@ -23,6 +23,7 @@
 """
 import uuid
 
+from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
@@ -207,32 +208,45 @@ class MapHubPlugin:
                 action)
             self.iface.removeToolBarIcon(action)
 
-
     def run(self):
         """Run method that performs all the real work"""
 
         # Create the dialog with elements (after translation) and keep reference
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
+        if self.first_start:
             self.first_start = False
             self.dlg = MapHubPluginDialog()
 
-        # show the dialog
-        self.dlg.show()
-        # Run the dialog event loop
+        # Get all open layers that are either vector or raster layers with a file location.
+        layers = [
+            layer for layer in self.iface.mapCanvas().layers()
+            if (layer.type() in [QgsMapLayer.VectorLayer,
+                                 QgsMapLayer.RasterLayer] and layer.dataProvider().dataSourceUri())
+        ]
+
+        # Populate the layers combobox
+        self.dlg.populate_layers_combobox(layers)
+
+        # Get options from your function
+        projects = self.client.get_projects()
+
+        # Populate the options combobox
+        self.dlg.populate_projects_combobox(projects)
+
+        # Show the dialog
         result = self.dlg.exec_()
+
         # See if OK was pressed
-
-        print("TESTING!!!")
-
         if result:
-            print("YEP")
-            # Do something useful here - delete the line containing pass and
-            # substitute with your code.
-            self.client.upload_map(
-                "testing_api_wrapper_222_plugin",
-                uuid.UUID("93313e42-36f1-4bfc-a5d6-45484bce043e"),
-                False,
-                "/home/nox/Downloads/asdasdasd.tif"
-            )
+            # Get selected values
+            selected_layer = self.dlg.get_selected_layer()
+            selected_project = self.dlg.get_selected_project()
+            # selected_public = self.dlg.get_selected_public_public()
 
+            # Upload layer to MapHub
+            self.client.upload_map(
+                map_name=selected_layer.name(),
+                project_id=selected_project["id"],
+                public=False,
+                path=selected_layer.dataProvider().dataSourceUri(),
+            )

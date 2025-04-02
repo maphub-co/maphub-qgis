@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, List
 import requests
 
 
@@ -14,7 +14,7 @@ class MapHubClient:
                 "X-API-Key": f"{self.api_key}"
             })
 
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
+    def _make_request(self, method: str, endpoint: str, **kwargs):
         response = self.session.request(
             method,
             f"{self.base_url}/{endpoint.lstrip('/')}",
@@ -26,6 +26,9 @@ class MapHubClient:
             raise Exception(f"Status code {response.status_code}: {response.text}")
 
         return response.json()
+
+    def get_projects(self) -> List[Dict[str, Any]]:
+        return self._make_request("GET", "/projects")
 
     def get_map(self, map_id: uuid.UUID) -> Dict[str, Any]:
         return self._make_request("GET", f"/maps/{map_id}")
