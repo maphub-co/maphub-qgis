@@ -26,7 +26,9 @@ import uuid
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QMessageBox
+
+
 
 # Initialize Qt resources from file resources.py
 # Import the code for the dialog
@@ -223,9 +225,24 @@ class MapHubPlugin:
             if (layer.type() in [QgsMapLayer.VectorLayer,
                                  QgsMapLayer.RasterLayer] and layer.dataProvider().dataSourceUri())
         ]
+        if len(layers) == 0:
+            return show_error_dialog("No layers that have local files detected. Please add a layer and try again.")
 
         # Populate the layers combobox
         self.dlg.populate_layers_combobox(layers)
+
+        # Connect layer combobox to map name field
+        def update_map_name(index):
+            if index >= 0:
+                layer = self.dlg.comboBox_layer.currentData()
+                if layer:
+                    self.dlg.set_default_map_name(layer.name())
+
+        # Connect the signal
+        self.dlg.comboBox_layer.currentIndexChanged.connect(update_map_name)
+
+        # Set initial value if there's a layer selected
+        update_map_name(0)
 
         # Get options from your function
         projects = self.client.get_projects()
@@ -239,14 +256,44 @@ class MapHubPlugin:
         # See if OK was pressed
         if result:
             # Get selected values
+            selected_name = self.dlg.get_map_name()
+            if selected_name is None:
+                return show_error_dialog("No name selected")
+
             selected_layer = self.dlg.get_selected_layer()
+            if selected_layer is None:
+                return show_error_dialog("No layer selected")
+            file_path = selected_layer.dataProvider().dataSourceUri().split('|')[0]
+
             selected_project = self.dlg.get_selected_project()
-            # selected_public = self.dlg.get_selected_public_public()
+            if selected_project is None:
+                return show_error_dialog("No project selected")
+
+            selected_public = self.dlg.get_selected_public()
 
             # Upload layer to MapHub
-            self.client.upload_map(
-                map_name=selected_layer.name(),
-                project_id=selected_project["id"],
-                public=False,
-                path=selected_layer.dataProvider().dataSourceUri(),
-            )
+            try:
+                self.client.upload_map(
+                    map_name=selected_name,
+                    project_id=selected_project["id"],
+                    public=selected_public,
+                    path=file_path,
+                )
+            except Exception as e:
+                show_error_dialog(f"{e}", "Error uploading map to MapHub")
+                return
+
+
+def show_error_dialog(message, title="Error"):
+    """Display a modal error dialog.
+
+    Args:
+        message (str): The error message
+        title (str): Dialog title
+    """
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Critical)
+    msg_box.setText(message)
+    msg_box.setWindowTitle(title)
+    msg_box.setStandardButtons(QMessageBox.Ok)
+    msg_box.exec_()

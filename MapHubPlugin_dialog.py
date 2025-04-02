@@ -71,6 +71,18 @@ class MapHubPluginDialog(QtWidgets.QDialog, FORM_CLASS):
         """Return the currently selected option."""
         return self.comboBox_project.currentData()
 
+    def get_selected_public(self):
+        """Return whether the map should be uploaded publicly."""
+        return self.checkBox_public.isChecked()
+
+    def set_default_map_name(self, name):
+        """Set the default map name based on the selected layer."""
+        self.lineEdit_map_name.setText(name)
+
+    def get_map_name(self):
+        """Return the user-specified map name."""
+        return self.lineEdit_map_name.text()
+
     def closeEvent(self, event):
         """Override closeEvent to emit the closingPlugin signal."""
         self.closingPlugin.emit()

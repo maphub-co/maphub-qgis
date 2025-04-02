@@ -1,97 +1,117 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>MapHubPluginDialogBase</class>
- <widget class="QDialog" name="MapHubPluginDialogBase">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>400</width>
-    <height>300</height>
-   </rect>
-  </property>
-  <property name="windowTitle">
-   <string>MapHub</string>
-  </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QLabel" name="label_layer">
-     <property name="text">
-      <string>Select Layer:</string>
-     </property>
+    <class>MapHubPluginDialogBase</class>
+    <widget class="QDialog" name="MapHubPluginDialogBase">
+        <property name="geometry">
+            <rect>
+                <x>0</x>
+                <y>0</y>
+                <width>400</width>
+                <height>300</height>
+            </rect>
+        </property>
+        <property name="windowTitle">
+            <string>MapHub</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout">
+            <item>
+                <widget class="QLabel" name="label_layer">
+                    <property name="text">
+                        <string>Select Layer:</string>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <widget class="QComboBox" name="comboBox_layer"/>
+            </item>
+            <item>
+                <widget class="QLabel" name="label_map_name">
+                    <property name="text">
+                        <string>Map Name:</string>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <widget class="QLineEdit" name="lineEdit_map_name"/>
+            </item>
+            <item>
+                <widget class="QLabel" name="label_project">
+                    <property name="text">
+                        <string>Select MapHub project:</string>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <widget class="QComboBox" name="comboBox_project"/>
+            </item>
+            <item>
+                <widget class="QCheckBox" name="checkBox_public">
+                    <property name="text">
+                        <string>Upload map publicly</string>
+                    </property>
+                    <property name="checked">
+                        <bool>false</bool>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <spacer name="verticalSpacer">
+                    <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                        <size>
+                            <width>20</width>
+                            <height>40</height>
+                        </size>
+                    </property>
+                </spacer>
+            </item>
+            <item>
+                <widget class="QDialogButtonBox" name="button_box">
+                    <property name="orientation">
+                        <enum>Qt::Horizontal</enum>
+                    </property>
+                    <property name="standardButtons">
+                        <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+                    </property>
+                </widget>
+            </item>
+        </layout>
     </widget>
-   </item>
-   <item>
-    <widget class="QComboBox" name="comboBox_layer"/>
-   </item>
-   <item>
-    <widget class="QLabel" name="label_project">
-     <property name="text">
-      <string>Select MapHub project:</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QComboBox" name="comboBox_project"/>
-   </item>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item>
-    <widget class="QDialogButtonBox" name="button_box">
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
-     </property>
-     <property name="standardButtons">
-      <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-     </property>
-    </widget>
-   </item>
-  </layout>
- </widget>
- <resources/>
- <connections>
-  <connection>
-   <sender>button_box</sender>
-   <signal>accepted()</signal>
-   <receiver>MapHubPluginDialogBase</receiver>
-   <slot>accept()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>button_box</sender>
-   <signal>rejected()</signal>
-   <receiver>MapHubPluginDialogBase</receiver>
-   <slot>reject()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>20</x>
-     <y>20</y>
-    </hint>
-   </hints>
-  </connection>
- </connections>
+    <resources/>
+    <connections>
+        <connection>
+            <sender>button_box</sender>
+            <signal>accepted()</signal>
+            <receiver>MapHubPluginDialogBase</receiver>
+            <slot>accept()</slot>
+            <hints>
+                <hint type="sourcelabel">
+                    <x>20</x>
+                    <y>20</y>
+                </hint>
+                <hint type="destinationlabel">
+                    <x>20</x>
+                    <y>20</y>
+                </hint>
+            </hints>
+        </connection>
+        <connection>
+            <sender>button_box</sender>
+            <signal>rejected()</signal>
+            <receiver>MapHubPluginDialogBase</receiver>
+            <slot>reject()</slot>
+            <hints>
+                <hint type="sourcelabel">
+                    <x>20</x>
+                    <y>20</y>
+                </hint>
+                <hint type="destinationlabel">
+                    <x>20</x>
+                    <y>20</y>
+                </hint>
+            </hints>
+        </connection>
+    </connections>
 </ui>
