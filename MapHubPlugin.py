@@ -28,8 +28,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
-
-
+from .MapHubPlugin_apikey_dialog import ApiKeyDialog
 # Initialize Qt resources from file resources.py
 # Import the code for the dialog
 from .MapHubPlugin_dialog import MapHubPluginDialog
@@ -63,16 +62,6 @@ class MapHubPlugin:
             application at run time.
         :type iface: QgsInterface
         """
-
-        # from .lib.maphub.client import MapHubClient
-
-
-        self.client = MapHubClient(
-            # base_url="https://api-dev-432878571563.europe-west4.run.app",
-            api_key="CBvSBvokiOGASqSqJm4GgmPt1b5hd5zdraT1PpaKYHE",
-            base_url="http://localhost:8000"
-        )
-
 
         # Save reference to the QGIS interface
         self.iface = iface
@@ -198,6 +187,13 @@ class MapHubPlugin:
             callback=self.run,
             parent=self.iface.mainWindow())
 
+        self.add_action(
+            icon_path,
+            text=self.tr(u'Set API Key'),
+            callback=self.show_api_key_settings,
+            parent=self.iface.mainWindow()
+        )
+
         # will be set False in run()
         self.first_start = True
 
@@ -210,8 +206,43 @@ class MapHubPlugin:
                 action)
             self.iface.removeToolBarIcon(action)
 
+    def check_api_key(self):
+        """Check if API key exists, prompt for it if not."""
+        settings = QSettings()
+        api_key = settings.value("MapHubPlugin/api_key", "")
+
+        if not api_key:
+            # No API key found, ask user to input it
+            dlg = ApiKeyDialog(self.iface.mainWindow())
+            result = dlg.exec_()
+
+            if result:
+                # User provided an API key
+                api_key = dlg.get_api_key()
+                return api_key
+            else:
+                # User canceled the dialog
+                return None
+
+        return api_key
+
+    def show_api_key_settings(self):
+        """Show API key settings dialog to update the key."""
+        dlg = ApiKeyDialog(self.iface.mainWindow())
+        dlg.exec_()
+
     def run(self):
         """Run method that performs all the real work"""
+
+        api_key = self.check_api_key()
+        if api_key is None:
+            return show_error_dialog("API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it.")
+
+        client = MapHubClient(
+            # base_url="https://api-dev-432878571563.europe-west4.run.app",
+            api_key=api_key,
+            base_url="http://localhost:8000"
+        )
 
         # Create the dialog with elements (after translation) and keep reference
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
@@ -245,7 +276,9 @@ class MapHubPlugin:
         update_map_name(0)
 
         # Get options from your function
-        projects = self.client.get_projects()
+        projects = client.get_projects()
+        if len(projects) == 0:
+            return show_error_dialog("You do not yet have any projects. Please create one on https://maphub.co/dashboard/projects and try again.")
 
         # Populate the options combobox
         self.dlg.populate_projects_combobox(projects)
@@ -273,7 +306,7 @@ class MapHubPlugin:
 
             # Upload layer to MapHub
             try:
-                self.client.upload_map(
+                client.upload_map(
                     map_name=selected_name,
                     project_id=selected_project["id"],
                     public=selected_public,
