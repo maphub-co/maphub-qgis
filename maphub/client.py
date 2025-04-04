@@ -1,10 +1,10 @@
 import uuid
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import requests
 
 
 class MapHubClient:
-    def __init__(self, api_key: str | None, base_url: str = "https://api-main-432878571563.europe-west4.run.app"):
+    def __init__(self, api_key: Optional[str], base_url: str = "https://api-main-432878571563.europe-west4.run.app"):
         self.api_key = api_key
         self.base_url = base_url
         self.session = requests.Session()
