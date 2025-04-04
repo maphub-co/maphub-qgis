@@ -217,9 +217,7 @@ class MapHubPlugin:
             return show_error_dialog("API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it.")
 
         client = MapHubClient(
-            # base_url="https://api-dev-432878571563.europe-west4.run.app",
             api_key=api_key,
-            base_url="http://localhost:8000"
         )
 
         # Create the dialog with elements (after translation) and keep reference
