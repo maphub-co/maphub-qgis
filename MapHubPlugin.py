@@ -1,32 +1,63 @@
 # -*- coding: utf-8 -*-
-import uuid
+
+import os
+import tempfile
+import zipfile
+import glob
 
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
-from .MapHubPlugin_apikey_dialog import ApiKeyDialog
-# Initialize Qt resources from file resources.py
-# Import the code for the dialog
-from .MapHubPlugin_dialog import MapHubPluginDialog
+from ui.ApiKeyDialog import ApiKeyDialog
+from ui.UploadMapDialog import UploadMapDialog
 import os.path
 
-
-# def load_bundled_libraries():
-#     """Add the bundled libraries to the Python path"""
-#     lib_dir = os.path.join(os.path.dirname(__file__), 'lib')
-#     if os.path.exists(lib_dir) and lib_dir not in sys.path:
-#         sys.path.insert(0, lib_dir)
-#
-# # Add the lib directory to the Python path
-# lib_dir = os.path.join(os.path.dirname(__file__), 'lib')
-# if lib_dir not in sys.path:
-#     sys.path.insert(0, lib_dir)
-
-# Now import normally
-# from .maphub import MapHubClient
+# MapHub package imports
 from .maphub.client import MapHubClient
+from .maphub.exceptions import APIException
+
+
+def show_error_dialog(message, title="Error"):
+    """Display a modal error dialog.
+
+    Args:
+        message (str): The error message
+        title (str): Dialog title
+    """
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Critical)
+    msg_box.setText(message)
+    msg_box.setWindowTitle(title)
+    msg_box.setStandardButtons(QMessageBox.Ok)
+    msg_box.exec_()
+
+
+def handled_exceptions(func):
+    """Decorator to handle exceptions."""
+
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except APIException as e:
+            if e.status_code == 500:
+                show_error_dialog(
+                    "Error from the MapHub server. A Bug report is sent and the issue will be investigated asap.",
+                    "Error uploading map to MapHub"
+                )
+            elif e.status_code == 402:
+                show_error_dialog(
+                    f"{e.message}\nUpgrade to premium here: https://maphub.co/premium",
+                    # TODO add correct upgrade page.
+                    "Premium account required."
+                )
+            else:
+                show_error_dialog(f"Code {e.status_code}: {e.message}", "Error uploading map to MapHub")
+        except Exception as e:
+            show_error_dialog(f"{e}", "Error")
+
+    return wrapper
 
 
 class MapHubPlugin:
@@ -80,18 +111,17 @@ class MapHubPlugin:
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
         return QCoreApplication.translate('MapHubPlugin', message)
 
-
     def add_action(
-        self,
-        icon_path,
-        text,
-        callback,
-        enabled_flag=True,
-        add_to_menu=True,
-        add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
-        parent=None):
+            self,
+            icon_path,
+            text,
+            callback,
+            enabled_flag=True,
+            add_to_menu=True,
+            add_to_toolbar=True,
+            status_tip=None,
+            whats_this=None,
+            parent=None):
         """Add a toolbar icon to the toolbar.
 
         :param icon_path: Path to the icon for this action. Can be a resource
@@ -158,23 +188,24 @@ class MapHubPlugin:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/MapHubPlugin/icon.png'
+        icon_path = ':/plugins/MapHub/icon.png'
         self.add_action(
             icon_path,
             text=self.tr(u'Upload to HapHub'),
             callback=self.run,
-            parent=self.iface.mainWindow())
+            parent=self.iface.mainWindow(),
+        )
 
         self.add_action(
             icon_path,
             text=self.tr(u'Set API Key'),
             callback=self.show_api_key_settings,
-            parent=self.iface.mainWindow()
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=False
         )
 
         # will be set False in run()
         self.first_start = True
-
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -204,11 +235,13 @@ class MapHubPlugin:
 
         return api_key
 
+    @handled_exceptions
     def show_api_key_settings(self):
         """Show API key settings dialog to update the key."""
         dlg = ApiKeyDialog(self.iface.mainWindow())
         dlg.exec_()
 
+    @handled_exceptions
     def run(self):
         """Run method that performs all the real work"""
 
@@ -224,7 +257,7 @@ class MapHubPlugin:
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start:
             self.first_start = False
-            self.dlg = MapHubPluginDialog()
+            self.dlg = UploadMapDialog()
 
         # Get all open layers that are either vector or raster layers with a file location.
         layers = [
@@ -280,29 +313,35 @@ class MapHubPlugin:
 
             selected_public = self.dlg.get_selected_public()
 
-            # Upload layer to MapHub
-            try:
+            if file_path.lower().endswith('.shp'):  # Shapefiles
+                base_dir = os.path.dirname(file_path)
+                file_name = os.path.splitext(os.path.basename(file_path))[0]
+
+                # Create temporary zip file
+                temp_zip = tempfile.mktemp(suffix='.zip')
+
+                with zipfile.ZipFile(temp_zip, 'w') as zipf:
+                    # Find all files with same basename but different extensions
+                    pattern = os.path.join(base_dir, file_name + '.*')
+                    shapefile_parts = glob.glob(pattern)
+
+                    for part_file in shapefile_parts:
+                        # Add file to zip with just the filename (not full path)
+                        zipf.write(part_file, os.path.basename(part_file))
+
+                # Upload layer to MapHub
+                client.upload_map(
+                    map_name=selected_name,
+                    project_id=selected_project["id"],
+                    public=selected_public,
+                    path=temp_zip,
+                )
+
+            else:
+                # Upload layer to MapHub
                 client.upload_map(
                     map_name=selected_name,
                     project_id=selected_project["id"],
                     public=selected_public,
                     path=file_path,
                 )
-            except Exception as e:
-                show_error_dialog(f"{e}", "Error uploading map to MapHub")
-                return
-
-
-def show_error_dialog(message, title="Error"):
-    """Display a modal error dialog.
-
-    Args:
-        message (str): The error message
-        title (str): Dialog title
-    """
-    msg_box = QMessageBox()
-    msg_box.setIcon(QMessageBox.Critical)
-    msg_box.setText(message)
-    msg_box.setWindowTitle(title)
-    msg_box.setStandardButtons(QMessageBox.Ok)
-    msg_box.exec_()

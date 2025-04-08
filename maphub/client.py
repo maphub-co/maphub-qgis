@@ -2,6 +2,8 @@ import uuid
 from typing import Dict, Any, List, Optional
 import requests
 
+from .exceptions import APIException
+
 
 class MapHubClient:
     def __init__(self, api_key: Optional[str], base_url: str = "https://api-main-432878571563.europe-west4.run.app"):
@@ -23,7 +25,7 @@ class MapHubClient:
         try:
             response.raise_for_status()
         except:
-            raise Exception(f"Status code {response.status_code}: {response.text}")
+            raise APIException(response.status_code, response.text)
 
         return response.json()
 
