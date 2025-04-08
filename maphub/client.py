@@ -25,7 +25,7 @@ class MapHubClient:
         try:
             response.raise_for_status()
         except:
-            raise APIException(response.status_code, response.text)
+            raise APIException(response.status_code, response.json()['detail'])
 
         return response.json()
 

@@ -10,8 +10,8 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
-from ui.ApiKeyDialog import ApiKeyDialog
-from ui.UploadMapDialog import UploadMapDialog
+from .ui.ApiKeyDialog import ApiKeyDialog
+from .ui.UploadMapDialog import UploadMapDialog
 import os.path
 
 # MapHub package imports
@@ -36,7 +36,6 @@ def show_error_dialog(message, title="Error"):
 
 def handled_exceptions(func):
     """Decorator to handle exceptions."""
-
     def wrapper(*args, **kwargs):
         try:
             func(*args, **kwargs)
@@ -48,8 +47,7 @@ def handled_exceptions(func):
                 )
             elif e.status_code == 402:
                 show_error_dialog(
-                    f"{e.message}\nUpgrade to premium here: https://maphub.co/premium",
-                    # TODO add correct upgrade page.
+                    f"{e.message}\nUpgrade to premium here: https://maphub.co/dashboard/upgrade_plan",
                     "Premium account required."
                 )
             else:
@@ -236,13 +234,13 @@ class MapHubPlugin:
         return api_key
 
     @handled_exceptions
-    def show_api_key_settings(self):
+    def show_api_key_settings(self, checked=False):
         """Show API key settings dialog to update the key."""
         dlg = ApiKeyDialog(self.iface.mainWindow())
         dlg.exec_()
 
     @handled_exceptions
-    def run(self):
+    def run(self, checked=False):
         """Run method that performs all the real work"""
 
         api_key = self.check_api_key()
