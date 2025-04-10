@@ -42,7 +42,18 @@
                 </widget>
             </item>
             <item>
-                <widget class="QComboBox" name="comboBox_project"/>
+                <layout class="QHBoxLayout" name="horizontalLayout_project">
+                    <item>
+                        <widget class="QComboBox" name="comboBox_project"/>
+                    </item>
+                    <item>
+                        <widget class="QPushButton" name="btn_create_project">
+                            <property name="text">
+                                <string>Create New Project</string>
+                            </property>
+                        </widget>
+                    </item>
+                </layout>
             </item>
             <item>
                 <widget class="QCheckBox" name="checkBox_public">

@@ -231,40 +231,7 @@ class MapHubPlugin:
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start:
             self.first_start = False
-            self.dlg = UploadMapDialog()
-
-        # Get all open layers that are either vector or raster layers with a file location.
-        layers = [
-            layer for layer in self.iface.mapCanvas().layers()
-            if (layer.type() in [QgsMapLayer.VectorLayer,
-                                 QgsMapLayer.RasterLayer] and layer.dataProvider().dataSourceUri())
-        ]
-        if len(layers) == 0:
-            return show_error_dialog("No layers that have local files detected. Please add a layer and try again.")
-
-        # Populate the layers combobox
-        self.dlg.populate_layers_combobox(layers)
-
-        # Connect layer combobox to map name field
-        def update_map_name(index):
-            if index >= 0:
-                layer = self.dlg.comboBox_layer.currentData()
-                if layer:
-                    self.dlg.set_default_map_name(layer.name())
-
-        # Connect the signal
-        self.dlg.comboBox_layer.currentIndexChanged.connect(update_map_name)
-
-        # Set initial value if there's a layer selected
-        update_map_name(0)
-
-        # Get options from your function
-        projects = client.get_projects()
-        if len(projects) == 0:
-            return show_error_dialog("You do not yet have any projects. Please create one on https://maphub.co/dashboard/projects and try again.")
-
-        # Populate the options combobox
-        self.dlg.populate_projects_combobox(projects)
+            self.dlg = UploadMapDialog(self.iface)
 
         # Show the dialog
         result = self.dlg.exec_()

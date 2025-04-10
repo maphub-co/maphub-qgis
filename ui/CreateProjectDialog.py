@@ -29,6 +29,7 @@ class CreateProjectDialog(QtWidgets.QDialog, FORM_CLASS):
         self.button_box.accepted.connect(self.create_project)
         self.button_box.rejected.connect(self.reject)
 
+        self.project = None
 
     @handled_exceptions
     def create_project(self):
@@ -39,8 +40,7 @@ class CreateProjectDialog(QtWidgets.QDialog, FORM_CLASS):
             raise Exception("Project name needs to be set.")
 
         project = get_maphub_client().create_project(project_name)
-
-        return project
+        self.project = project
 
     def closeEvent(self, event):
         """Override closeEvent to emit the closingPlugin signal."""
