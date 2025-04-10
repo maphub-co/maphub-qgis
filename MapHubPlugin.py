@@ -153,17 +153,17 @@ class MapHubPlugin:
         icon_path = ':/plugins/MapHub/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'Upload to HapHub'),
-            callback=self.run,
+            text=self.tr(u'Get Map from HapHub'),
+            callback=self.get_map,
             parent=self.iface.mainWindow(),
+            add_to_toolbar=False
         )
 
         self.add_action(
             icon_path,
-            text=self.tr(u'Set API Key'),
-            callback=self.show_api_key_settings,
+            text=self.tr(u'Upload to HapHub'),
+            callback=self.run,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=False
         )
 
         self.add_action(
@@ -176,8 +176,8 @@ class MapHubPlugin:
 
         self.add_action(
             icon_path,
-            text=self.tr(u'Get Map from HapHub'),
-            callback=self.get_map,
+            text=self.tr(u'Set API Key'),
+            callback=self.show_api_key_settings,
             parent=self.iface.mainWindow(),
             add_to_toolbar=False
         )

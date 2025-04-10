@@ -146,8 +146,25 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         desc_label.setWordWrap(True)
         desc_layout.addWidget(desc_label)
 
-        # Add some stretch to align content
-        desc_layout.addStretch()
+        # Map tags
+        tags_container = QtWidgets.QWidget()
+        tags_layout = QtWidgets.QHBoxLayout(tags_container)
+        tags_layout.setContentsMargins(0, 5, 0, 0)  # Add some top margin
+
+        for tag in map_data.get('tags'):
+            tag_label = QtWidgets.QLabel(tag)
+            tag_label.setStyleSheet("""
+                background-color: #e0e0e0; 
+                border-radius: 4px; 
+                padding: 2px 6px;
+                color: #444444;
+                margin-right: 4px;
+            """)
+            tags_layout.addWidget(tag_label)
+
+        # Add stretch at the end to left-align tags
+        tags_layout.addStretch()
+        desc_layout.addWidget(tags_container)
 
         item_layout.addLayout(desc_layout, 1)  # Give description area more weight
 
