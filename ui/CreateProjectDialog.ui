@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Create New Project</string>
+   <string>MapHub: Create New Project</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
