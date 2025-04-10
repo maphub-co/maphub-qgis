@@ -41,7 +41,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
     def open_create_project_dialog(self):
         """Open the Create Project dialog and update projects if a new one is created."""
-        dialog = CreateProjectDialog(self)
+        dialog = CreateProjectDialog(self.iface.mainWindow())
         result = dialog.exec_()
 
         new_project = dialog.project
@@ -70,7 +70,6 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         if len(layers) == 0:
             raise Exception("No layers that have local files detected. Please add a layer and try again.")
 
-
         self.comboBox_layer.clear()
         for layer in layers:
             self.comboBox_layer.addItem(layer.name(), layer)
@@ -87,9 +86,6 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         # Set initial value if there's a layer selected
         update_map_name(0)
-
-
-
 
     def _populate_projects_combobox(self):
         """Populate the options combobox with items returned from a function."""

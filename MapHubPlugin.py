@@ -11,6 +11,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
+from .ui.GetMapDialog import GetMapDialog
 from .ui.CreateProjectDialog import CreateProjectDialog
 from .utils import handled_exceptions, show_error_dialog
 from .ui.ApiKeyDialog import ApiKeyDialog
@@ -173,6 +174,14 @@ class MapHubPlugin:
             add_to_toolbar=False
         )
 
+        self.add_action(
+            icon_path,
+            text=self.tr(u'Get Map from HapHub'),
+            callback=self.get_map,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=False
+        )
+
         # will be set False in run()
         self.first_start = True
 
@@ -216,6 +225,12 @@ class MapHubPlugin:
         dlg.exec_()
 
     @handled_exceptions
+    def get_map(self, checked=False):
+        """Show API key settings dialog to update the key."""
+        dlg = GetMapDialog(self.iface, self.iface.mainWindow())
+        result = dlg.exec_()
+
+    @handled_exceptions
     def run(self, checked=False):
         """Run method that performs all the real work"""
 
@@ -231,7 +246,8 @@ class MapHubPlugin:
         # Only create GUI ONCE in callback, so that it will only load when the plugin is started
         if self.first_start:
             self.first_start = False
-            self.dlg = UploadMapDialog(self.iface)
+
+        self.dlg = UploadMapDialog(self.iface, self.iface.mainWindow())
 
         # Show the dialog
         result = self.dlg.exec_()
