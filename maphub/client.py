@@ -60,7 +60,7 @@ class MapHubClient:
         :return: Response containing the created project.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("POST", "/projects", json={"project_name": project_name})
+        return self._make_request("POST", "/projects", params={"project_name": project_name})
 
     # Map endpoints
     def get_map(self, map_id: uuid.UUID) -> Dict[str, Any]:

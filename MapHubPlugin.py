@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import os.path
 import tempfile
 import zipfile
 import glob
@@ -10,52 +11,14 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
+from .ui.CreateProjectDialog import CreateProjectDialog
+from .utils import handled_exceptions, show_error_dialog
 from .ui.ApiKeyDialog import ApiKeyDialog
 from .ui.UploadMapDialog import UploadMapDialog
-import os.path
 
 # MapHub package imports
 from .maphub.client import MapHubClient
-from .maphub.exceptions import APIException
 
-
-def show_error_dialog(message, title="Error"):
-    """Display a modal error dialog.
-
-    Args:
-        message (str): The error message
-        title (str): Dialog title
-    """
-    msg_box = QMessageBox()
-    msg_box.setIcon(QMessageBox.Critical)
-    msg_box.setText(message)
-    msg_box.setWindowTitle(title)
-    msg_box.setStandardButtons(QMessageBox.Ok)
-    msg_box.exec_()
-
-
-def handled_exceptions(func):
-    """Decorator to handle exceptions."""
-    def wrapper(*args, **kwargs):
-        try:
-            func(*args, **kwargs)
-        except APIException as e:
-            if e.status_code == 500:
-                show_error_dialog(
-                    "Error from the MapHub server. A Bug report is sent and the issue will be investigated asap.",
-                    "Error uploading map to MapHub"
-                )
-            elif e.status_code == 402:
-                show_error_dialog(
-                    f"{e.message}\nUpgrade to premium here: https://maphub.co/dashboard/upgrade_plan",
-                    "Premium account required."
-                )
-            else:
-                show_error_dialog(f"Code {e.status_code}: {e.message}", "Error uploading map to MapHub")
-        except Exception as e:
-            show_error_dialog(f"{e}", "Error")
-
-    return wrapper
 
 
 class MapHubPlugin:
@@ -202,6 +165,14 @@ class MapHubPlugin:
             add_to_toolbar=False
         )
 
+        self.add_action(
+            icon_path,
+            text=self.tr(u'Create project'),
+            callback=self.create_project,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=False
+        )
+
         # will be set False in run()
         self.first_start = True
 
@@ -232,6 +203,11 @@ class MapHubPlugin:
                 return None
 
         return api_key
+
+    @handled_exceptions
+    def create_project(self, checked=False):
+        dlg = CreateProjectDialog(self.iface.mainWindow())
+        dlg.exec_()
 
     @handled_exceptions
     def show_api_key_settings(self, checked=False):
