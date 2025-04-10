@@ -119,6 +119,26 @@ class MapHubClient:
 
         return self._make_request("GET", f"/maps/{map_id}/tiler_url", params=params).json()
 
+    def get_layer_info(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> Dict[str, Any]:
+        """
+        Constructs a request to retrieve the tiler URL for a given map.
+
+        :param map_id: The UUID of the map for which the tiler URL is being requested.
+        :param version_id: An optional UUID specifying the particular version of the
+            map to retrieve the tiler URL for.
+        :param alias: An optional string specifying an alias for the map version.
+        :return: A string representing the tiler URL.
+        """
+        params = {}
+
+        if version_id is None:
+            params["version_id"] = version_id
+
+        if alias is None:
+            params["alias"] = alias
+
+        return self._make_request("GET", f"/maps/{map_id}/layer_info", params=params).json()
+
     def upload_map(self, map_name: str, project_id: uuid.UUID, public: bool, path: str):
         """
         Uploads a map to the server.

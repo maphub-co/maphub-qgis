@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
 
 import os
+
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal, QSettings, Qt, QByteArray
 from qgis.PyQt.QtGui import QColor, QPixmap
-from qgis.PyQt.QtWidgets import QLineEdit
+from qgis.PyQt.QtWidgets import QLineEdit, QFileDialog, QMessageBox
 from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
+from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
+
+from ..utils import handled_exceptions
 from ..utils import get_maphub_client
 
 
@@ -156,9 +160,9 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         button_layout.addWidget(btn_download)
 
         # Button 2 - View Details
-        btn_details = QtWidgets.QPushButton("Details")
-        btn_details.clicked.connect(lambda: self.on_details_clicked(map_data))
-        button_layout.addWidget(btn_details)
+        btn_tiling = QtWidgets.QPushButton("Tiling Service")
+        btn_tiling.clicked.connect(lambda: self.on_tiling_clicked(map_data))
+        button_layout.addWidget(btn_tiling)
 
         # Add some spacing between buttons and borders
         button_layout.addStretch()
@@ -182,10 +186,72 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
                         child.setPixmap(pixmap)
                         break
 
+    @handled_exceptions
     def on_download_clicked(self, map_data):
-        # Implement download functionality
-        print(f"Downloading map: {map_data.get('name')}")
+        print(f"Downloading map: {map_data.get('name')}\n{map_data}")
 
-    def on_details_clicked(self, map_data):
-        # Implement details view functionality
-        print(f"Viewing details for map: {map_data.get('name')}")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Map",
+            f"{map_data.get('name', 'map')}.tif" if map_data.get('type') == 'raster' else f"{map_data.get('name', 'map')}.fgb",
+            "GeoTIFF (*.tif);;All Files (*)" if map_data.get('type') == 'raster' else "FlatGeobuf (*.fgb);;All Files (*)"
+        )
+
+        # If user cancels the dialog, return early
+        if not file_path:
+            return
+
+        get_maphub_client().download_map(map_data['id'], file_path)
+
+        # Adding downloaded file to layers
+        if not os.path.exists(file_path):
+            raise Exception(f"Downloaded file not found at {file_path}")
+
+
+        if map_data.get('type') == 'raster':
+            layer = self.iface.addRasterLayer(file_path, map_data.get('name', os.path.basename(file_path)))
+        elif map_data.get('type') == 'vector':
+            layer = self.iface.addVectorLayer(file_path, map_data.get('name', os.path.basename(file_path)), "ogr")
+        else:
+            raise Exception(f"Unknown layer type: {map_data['type']}")
+
+        if not layer.isValid():
+            raise Exception(f"The downloaded map could not be added as a layer. Please check the file: {file_path}")
+        else:
+            QMessageBox.information(
+                self,
+                "Download Complete",
+                f"Map '{map_data.get('name')}' has been downloaded and added to your layers."
+            )
+
+    @handled_exceptions
+    def on_tiling_clicked(self, map_data):
+        print(f"Viewing details for map: {map_data.get('name')}\n{map_data}")
+
+        layer_info = get_maphub_client().get_layer_info(map_data['id'])
+        tiler_url = layer_info['tiling_url']
+        layer_name = map_data.get('name', f"Tiled Map {map_data['id']}")
+
+        # Add layer based on map type
+        if map_data.get('type') == 'vector':
+            # Add as vector tile layer
+            vector_tile_layer_string = f"type=xyz&url={tiler_url}&zmin={layer_info.get('min_zoom', 0)}&zmax={layer_info.get('max_zoom', 15)}"
+            vector_layer = QgsVectorTileLayer(vector_tile_layer_string, layer_name)
+            if vector_layer.isValid():
+                QgsProject.instance().addMapLayer(vector_layer)
+                self.iface.messageBar().pushSuccess("Success", f"Vector tile layer '{layer_name}' added.")
+            else:
+                self.iface.messageBar().pushWarning("Warning", f"Could not add vector tile layer from URL: {tiler_url}")
+        elif map_data.get('type') == 'raster':
+            uri = f"type=xyz&url={tiler_url.replace('&', '%26')}"
+
+            raster_layer = QgsRasterLayer(uri, layer_name, "wms")
+
+            if raster_layer.isValid():
+                QgsProject.instance().addMapLayer(raster_layer)
+                self.iface.messageBar().pushSuccess("Success", f"XYZ tile layer '{layer_name}' added.")
+            else:
+                self.iface.messageBar().pushWarning("Warning", f"Could not add XYZ tile layer from URL: {tiler_url}")
+        else:
+            raise Exception(f"Unknown layer type: {map_data['type']}")
+
