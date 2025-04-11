@@ -62,7 +62,7 @@ This will be stored securely and you won't need to enter it again.</string>
    <item>
     <widget class="QLabel" name="label_no_key">
      <property name="text">
-      <string>&lt;a href=&quot;https://www.maphub.co/dashboard/api-key&quot;&gt;Don't have an API key? Generate one here.&lt;/a&gt;</string>
+      <string>&lt;a href=&quot;https://www.maphub.co/dashboard/api_keys&quot;&gt;Don't have an API key? Generate one here.&lt;/a&gt;</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>
