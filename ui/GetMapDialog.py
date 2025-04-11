@@ -23,7 +23,6 @@ from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
-
 from ..utils import get_maphub_client, handled_exceptions
 
 
@@ -168,17 +167,42 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         self.load_maps(maps)
 
-    def load_public_maps(self, sort_by="recent"):
-        """Load public maps with optional sorting"""
-        # Clear any existing items
-        self.clear_list_layout()
+    def load_public_maps(self, sort_by="recent", page=1, append=False):
+        """Load public maps with optional sorting and pagination"""
+        # Clear any existing items if not appending
+        if not append:
+            self.clear_list_layout()
 
         # Get maps
-        public_maps_response = get_maphub_client().get_public_maps(sort_by=sort_by)
+        public_maps_response = get_maphub_client().get_public_maps(sort_by=sort_by, page=page)
         maps = public_maps_response.get('maps', [])
         pagination = public_maps_response.get('pagination', {})
 
         self.load_maps(maps)
+
+        # Add "Load more" button if there are more pages
+        if pagination.get('has_next', False):
+            load_more_button = QPushButton("Load more")
+            load_more_button.setObjectName("load_more_button")
+            load_more_button.clicked.connect(lambda: self.on_load_more_clicked(
+                next_page=page+1,
+                sort_by=sort_by
+            ))
+
+            # Add button to layout
+            self.list_layout.addWidget(load_more_button)
+
+    def on_load_more_clicked(self, next_page: int, sort_by: str):
+        """Handle click on the 'Load more' button"""
+        # Remove the current load more button first
+        for i in reversed(range(self.list_layout.count())):
+            widget = self.list_layout.itemAt(i).widget()
+            if widget is not None and widget.objectName() == "load_more_button":
+                widget.deleteLater()
+                break
+
+        # Increment page and load more maps
+        self.load_public_maps(sort_by=sort_by, page=next_page, append=True)
 
     def search_public_maps(self, search_term, sort_by="recent"):
         """Search for public maps"""
@@ -343,7 +367,6 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         if not os.path.exists(file_path):
             raise Exception(f"Downloaded file not found at {file_path}")
 
-
         if map_data.get('type') == 'raster':
             layer = self.iface.addRasterLayer(file_path, map_data.get('name', os.path.basename(file_path)))
         elif map_data.get('type') == 'vector':
@@ -390,4 +413,3 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
                 self.iface.messageBar().pushWarning("Warning", f"Could not add XYZ tile layer from URL: {tiler_url}")
         else:
             raise Exception(f"Unknown layer type: {map_data['type']}")
-
