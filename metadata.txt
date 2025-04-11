@@ -6,11 +6,11 @@
 name=MapHub
 qgisMinimumVersion=3.0
 description=QGIS plugin for uploading, sharing, and managing geospatial data with the MapHub platform
-version=0.3
+version=0.4
 author=MapHub
 email=maphub@meteory.eu
 
-about=MapHub is a community hub for GIS users to host, visualize, and share geospatial datasets. This plugin enables seamless integration between QGIS and MapHub, allowing users to upload maps to MapHub projects, share them publicly or privately, and (in upcoming features) browse projects and download maps directly within QGIS.
+about=MapHub is a community hub for GIS users to host, visualize, and share geospatial datasets. This plugin enables seamless integration between QGIS and MapHub, allowing users to upload maps to MapHub projects, share them publicly or privately, and browse projects and download maps directly within QGIS.
 
 tracker=https://gitlab.com/meteoryPA/maphub-qgis-plugin
 repository=https://gitlab.com/meteoryPA/maphub-qgis-plugin
