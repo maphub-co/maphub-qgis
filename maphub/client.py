@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import Dict, Any, List, Optional
 import requests
@@ -62,6 +63,78 @@ class MapHubClient:
         """
         return self._make_request("POST", "/projects", params={"project_name": project_name}).json()
 
+    # Maps endpoints
+    def get_project_maps(self, project_id: uuid.UUID) -> List[Dict[str, Any]]:
+        """
+        Fetches a list of maps associated with a specific project.
+
+        :param project_id: A UUID identifying the project whose maps are being fetched.
+        :type project_id: uuid.UUID
+        :return: A list of dictionaries containing map data. Each dictionary represents
+                 a map associated with the specified project.
+        :rtype: List[Dict[str, Any]]
+        """
+        return self._make_request("GET", f"/maps", params={"project_id": project_id}).json()
+
+    def get_public_maps(self, sort_by: str = None, page: int = None, page_size: int = None) -> Dict[str, Any]:
+        """
+        Fetches a list of public maps with optional sorting and pagination.
+
+        This method retrieves the available public maps from the server. The results
+        can be customized by specifying the sorting criteria, the page number to
+        retrieve, and the desired number of results per page.
+
+        You can omit any of the optional parameters if their functionality is not
+        required.
+
+        :param sort_by: Specifies the field by which the public maps should be sorted.
+            Optional parameter.
+        :param page: Determines the page index to retrieve if the results are paginated.
+            Optional parameter.
+        :param page_size: Defines the number of results to return per page. Optional
+            parameter.
+        :return: A list of dictionaries where each dictionary represents a public map
+            and its associated details.
+        :rtype: List[Dict[str, Any]]
+        """
+        params = {}
+        if sort_by:
+            params["sort_by"] = sort_by
+        if page:
+            params["page"] = page
+        if page_size:
+            params["page_size"] = page_size
+
+        return self._make_request("GET", "/maps/list", params=params).json()
+
+    def search_maps(self, query: str = None, map_type: str = None, tags: List[str] = None, author_uid: str = None) -> List[Dict[str, Any]]:
+        """
+        Searches for maps based on the specified criteria and returns a list of matching maps.
+        This method allows the user to search through maps by specifying various filters like
+        query string, map type, associated tags, or author unique identifier. Results are returned
+        as a list of dictionaries with the matching maps' details.
+
+        :param query: A string used to search for maps with matching titles, descriptions, or
+                      other relevant fields. Defaults to None if not specified.
+        :param map_type: A string indicating the type/category of maps to filter the search by.
+                         Defaults to None if not specified.
+        :param tags: A list of strings representing specific tags to filter the maps. Only maps
+                     associated with any of these tags will be included in the results. Defaults
+                     to None if not specified.
+        :param author_uid: A string representing the unique identifier of the author. Filters
+                           the search to include only maps created by this author. Defaults to
+                           None if not specified.
+        :return: A list of dictionaries, each containing details of a map that matches the
+                 specified search criteria.
+        :rtype: List[Dict[str, Any]]
+        """
+        return self._make_request("POST", "/maps/search", data=json.dumps({
+            "search_query": query,
+            "map_type": map_type,
+            "tags": tags,
+            "author_uid": author_uid,
+        })).json()
+
     # Map endpoints
     def get_map(self, map_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -73,18 +146,6 @@ class MapHubClient:
         :rtype: Dict[str, Any]
         """
         return self._make_request("GET", f"/maps/{map_id}").json()
-
-    def get_maps(self, project_id: uuid.UUID) -> List[Dict[str, Any]]:
-        """
-        Fetches a list of maps associated with a specific project.
-
-        :param project_id: A UUID identifying the project whose maps are being fetched.
-        :type project_id: uuid.UUID
-        :return: A list of dictionaries containing map data. Each dictionary represents
-                 a map associated with the specified project.
-        :rtype: List[Dict[str, Any]]
-        """
-        return self._make_request("GET", f"/maps", params={"project_id": project_id}).json()
 
     def get_thumbnail(self, map_id: uuid.UUID) -> bytes:
         """
