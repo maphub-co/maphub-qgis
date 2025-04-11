@@ -16,12 +16,6 @@
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QLabel" name="label_title">
-     <property name="text">
-      <string>Available Maps</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignCenter</set>
-     </property>
      <property name="font">
       <font>
        <pointsize>12</pointsize>
@@ -29,21 +23,82 @@
        <bold>true</bold>
       </font>
      </property>
+     <property name="text">
+      <string>Available Maps</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_project">
-     <item>
-      <widget class="QLabel" name="label_project">
-       <property name="text">
-        <string>Select Project:</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QComboBox" name="comboBox_project"/>
-     </item>
-    </layout>
+    <widget class="QTabWidget" name="tabWidget_map_type">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="currentIndex">
+      <number>1</number>
+     </property>
+     <widget class="QWidget" name="tab_project_maps">
+      <attribute name="title">
+       <string>Project Maps</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_project">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_project">
+         <item>
+          <widget class="QLabel" name="label_project">
+           <property name="text">
+            <string>Select Project:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboBox_project"/>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tab_public_maps">
+      <attribute name="title">
+       <string>Public Maps</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_public">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_search">
+         <item>
+          <widget class="QLabel" name="label_search">
+           <property name="text">
+            <string>Search:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_search">
+           <property name="placeholderText">
+            <string>Enter search terms...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_search">
+           <property name="text">
+            <string>Search</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
    </item>
    <item>
     <widget class="QScrollArea" name="scrollArea">
@@ -51,6 +106,14 @@
       <bool>true</bool>
      </property>
      <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>780</width>
+        <height>486</height>
+       </rect>
+      </property>
       <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
         <widget class="QWidget" name="listContainer" native="true">
