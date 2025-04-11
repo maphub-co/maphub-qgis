@@ -153,7 +153,7 @@ class MapHubPlugin:
         icon_path = ':/plugins/MapHub/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'Get Map from HapHub'),
+            text=self.tr(u'Get Map from MapHub'),
             callback=self.get_map,
             parent=self.iface.mainWindow(),
             add_to_toolbar=False
@@ -161,7 +161,7 @@ class MapHubPlugin:
 
         self.add_action(
             icon_path,
-            text=self.tr(u'Upload to HapHub'),
+            text=self.tr(u'Upload to MapHub'),
             callback=self.run,
             parent=self.iface.mainWindow(),
         )
