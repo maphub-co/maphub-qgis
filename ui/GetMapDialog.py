@@ -112,6 +112,11 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             # If a project is already selected, load its maps
             if self.comboBox_project.count() > 0:
                 self.on_project_selected(self.comboBox_project.currentIndex())
+            else:
+                no_maps_label = QLabel(f"You dont have any projects yet. Check out the public maps instead.")
+                no_maps_label.setAlignment(Qt.AlignCenter)
+                self.list_layout.addWidget(no_maps_label)
+
         else:  # Public Maps tab
             # Load public maps with default sorting (Recent)
             self.load_public_maps()
@@ -232,9 +237,6 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         self.comboBox_project.clear()
 
         projects = get_maphub_client().get_projects()
-        if len(projects) == 0:
-            raise Exception(
-                "You do not yet have any projects. Please create one on https://maphub.co/dashboard/projects and try again.")
 
         for project in projects:
             project_id = project.get('id')
