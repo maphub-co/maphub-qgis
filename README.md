@@ -7,9 +7,9 @@ MapHub is a community hub for GIS users to host, visualize, and share geospatial
 - [x] Connect to your MapHub account using API key authentication
 - [x] Share maps publicly or keep them private
 - [x] Upload local maps to your MapHub projects
-- [ ] Browse your MapHub projects
-- [ ] Directly view MapHub maps in QGIS via tiling service (Removing need to download)
-- [ ] Download maps from MapHub to use in QGIS
+- [x] Browse your MapHub projects
+- [x] Directly view MapHub maps in QGIS via tiling service
+- [x] Download maps from MapHub to use in QGIS
 - [ ] And much more ...
 
 ## Installation
