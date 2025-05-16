@@ -72,7 +72,7 @@ class MapsEndpoint(BaseEndpoint):
         
         return self._make_request("GET", f"/maps/{map_id}/layer_info", params=params).json()
     
-    def upload_map(self, map_name: str, folder_id: uuid.UUID = None, project_id: uuid.UUID = None, public: bool = False,
+    def upload_map(self, map_name: str, folder_id: uuid.UUID = None, public: bool = False,
                    path: str = None):
         """
         Uploads a map to the server.
@@ -81,19 +81,12 @@ class MapsEndpoint(BaseEndpoint):
         :type map_name: str
         :param folder_id: The unique identifier of the folder to which the map belongs.
         :type folder_id: uuid.UUID
-        :param project_id: DEPRECATED: Use folder_id instead. The unique identifier of the project to which the map belongs.
-        :type project_id: uuid.UUID
         :param public: A flag indicating whether the map should be publicly accessible or not.
         :type public: bool
         :param path: The file path to the map data to be uploaded.
         :type path: str
         :return: The response returned from the server after processing the map upload request.
         """
-        # For backward compatibility
-        if folder_id is None and project_id is not None:
-            warnings.warn("project_id parameter is deprecated, use folder_id instead", DeprecationWarning, stacklevel=2)
-            folder_id = project_id
-        
         if folder_id is None:
             raise ValueError("folder_id must be provided")
         

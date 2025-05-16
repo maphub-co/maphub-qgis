@@ -272,7 +272,7 @@ class MapHubClient:
     # Map endpoints
     def get_map(self, map_id: uuid.UUID) -> Dict[str, Any]:
         """
-        DEPRECATED: Use map.get_map() instead. Will be removed in a future version.
+        DEPRECATED: Use maps.get_map() instead. Will be removed in a future version.
 
         Retrieves a map resource based on the provided map ID.
 
@@ -291,7 +291,7 @@ class MapHubClient:
 
     def get_thumbnail(self, map_id: uuid.UUID) -> bytes:
         """
-        DEPRECATED: Use map.get_thumbnail() instead. Will be removed in a future version.
+        DEPRECATED: Use maps.get_thumbnail() instead. Will be removed in a future version.
 
         Fetches the thumbnail image for a given map using its unique identifier.
 
@@ -312,7 +312,7 @@ class MapHubClient:
 
     def get_tiler_url(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> str:
         """
-        DEPRECATED: Use map.get_tiler_url() instead. Will be removed in a future version.
+        DEPRECATED: Use maps.get_tiler_url() instead. Will be removed in a future version.
 
         Constructs a request to retrieve the tiler URL for a given map.
 
@@ -332,7 +332,7 @@ class MapHubClient:
 
     def get_layer_info(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> Dict[str, Any]:
         """
-        DEPRECATED: Use map.get_layer_info() instead. Will be removed in a future version.
+        DEPRECATED: Use maps.get_layer_info() instead. Will be removed in a future version.
 
         Constructs a request to retrieve layer information for a given map.
 
@@ -350,17 +350,15 @@ class MapHubClient:
         )
         return self.maps.get_layer_info(map_id, version_id, alias)
 
-    def upload_map(self, map_name: str, folder_id: uuid.UUID = None, project_id: uuid.UUID = None, public: bool = False,
+    def upload_map(self, map_name: str, project_id: uuid.UUID = None, public: bool = False,
                    path: str = None):
         """
-        DEPRECATED: Use map.upload_map() instead. Will be removed in a future version.
+        DEPRECATED: Use maps.upload_map() instead. Will be removed in a future version.
 
         Uploads a map to the server.
 
         :param map_name: The name of the map to be uploaded.
         :type map_name: str
-        :param folder_id: The unique identifier of the folder to which the map belongs.
-        :type folder_id: uuid.UUID
         :param project_id: DEPRECATED: Use folder_id instead. The unique identifier of the project to which the map belongs.
         :type project_id: uuid.UUID
         :param public: A flag indicating whether the map should be publicly accessible or not.
@@ -375,11 +373,11 @@ class MapHubClient:
             DeprecationWarning,
             stacklevel=2
         )
-        return self.maps.upload_map(map_name, folder_id, project_id, public, path)
+        return self.maps.upload_map(map_name, project_id, public, path)
 
     def download_map(self, map_id: uuid.UUID, path: str):
         """
-        DEPRECATED: Use map.download_map() instead. Will be removed in a future version.
+        DEPRECATED: Use maps.download_map() instead. Will be removed in a future version.
 
         Downloads a map from a remote server and saves it to the specified path.
 

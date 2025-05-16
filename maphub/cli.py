@@ -130,7 +130,7 @@ def main() -> None:
 
     # Auth command
     auth_parser = subparsers.add_parser("auth", help="Save API key")
-    auth_parser.add_argument("api_key", help="MapHub API key")
+    auth_parser.add_argument("api_key", help="MapHub API key (Can be created here: https://www.maphub.co/dashboard/api_keys)")
     auth_parser.set_defaults(func=auth_command)
 
     # Upload command
