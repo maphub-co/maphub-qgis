@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-
+import glob
 import os
-from typing import List, Dict, Any
+import tempfile
+import zipfile
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
@@ -9,7 +10,7 @@ from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
-from ..utils import get_maphub_client
+from ..utils import get_maphub_client, handled_exceptions, show_error_dialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -32,7 +33,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         self.iface = iface
 
         # Connect signals
-        self.button_box.accepted.connect(self.accept)
+        self.button_box.accepted.connect(self.upload_map)
         self.button_box.rejected.connect(self.reject)
         self.btn_create_folder.clicked.connect(self.open_create_folder_dialog)
 
@@ -103,23 +104,62 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         for folder in folders:
             self.comboBox_folder.addItem(folder["name"], folder)
 
-    def get_selected_layer(self):
-        """Return the currently selected layer."""
-        return self.comboBox_layer.currentData()
-
-    def get_selected_folder(self):
-        """Return the currently selected folder."""
-        return self.comboBox_folder.currentData()
-
-    def get_selected_public(self):
-        """Return whether the map should be uploaded publicly."""
-        return self.checkBox_public.isChecked()
-
-    def get_map_name(self):
-        """Return the user-specified map name."""
-        return self.lineEdit_map_name.text()
-
     def closeEvent(self, event):
         """Override closeEvent to emit the closingPlugin signal."""
         self.closingPlugin.emit()
         event.accept()
+
+    @handled_exceptions
+    def upload_map(self):
+        client = get_maphub_client()
+
+        # Get selected values
+        selected_name = self.lineEdit_map_name.text()
+        if selected_name is None:
+            return show_error_dialog("No name selected")
+
+        selected_layer = self.comboBox_layer.currentData()
+        if selected_layer is None:
+            return show_error_dialog("No layer selected")
+        file_path = selected_layer.dataProvider().dataSourceUri().split('|')[0]
+
+        selected_folder = self.comboBox_folder.currentData()
+        if selected_folder is None:
+            return show_error_dialog("No folder selected")
+
+        selected_public = self.checkBox_public.isChecked()
+
+        if file_path.lower().endswith('.shp'):  # Shapefiles
+            base_dir = os.path.dirname(file_path)
+            file_name = os.path.splitext(os.path.basename(file_path))[0]
+
+            # Create temporary zip file
+            temp_zip = tempfile.mktemp(suffix='.zip')
+
+            with zipfile.ZipFile(temp_zip, 'w') as zipf:
+                # Find all files with same basename but different extensions
+                pattern = os.path.join(base_dir, file_name + '.*')
+                shapefile_parts = glob.glob(pattern)
+
+                for part_file in shapefile_parts:
+                    # Add file to zip with just the filename (not full path)
+                    zipf.write(part_file, os.path.basename(part_file))
+
+            # Upload layer to MapHub
+            client.maps.upload_map(
+                map_name=selected_name,
+                folder_id=selected_folder["id"],
+                public=selected_public,
+                path=temp_zip,
+            )
+
+        else:
+            # Upload layer to MapHub
+            client.maps.upload_map(
+                map_name=selected_name,
+                folder_id=selected_folder["id"],
+                public=selected_public,
+                path=file_path,
+            )
+
+        return None

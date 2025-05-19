@@ -162,7 +162,7 @@ class MapHubPlugin:
         self.add_action(
             icon_path,
             text=self.tr(u'Upload to MapHub'),
-            callback=self.run,
+            callback=self.upload_map,
             parent=self.iface.mainWindow(),
         )
 
@@ -231,76 +231,7 @@ class MapHubPlugin:
         result = dlg.exec_()
 
     @handled_exceptions
-    def run(self, checked=False):
-        """Run method that performs all the real work"""
-
-        api_key = self.check_api_key()
-        if api_key is None:
-            return show_error_dialog("API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it.")
-
-        client = MapHubClient(
-            api_key=api_key,
-        )
-
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start:
-            self.first_start = False
-
-        self.dlg = UploadMapDialog(self.iface, self.iface.mainWindow())
-
-        # Show the dialog
-        result = self.dlg.exec_()
-
-        # See if OK was pressed
-        if result:
-            # Get selected values
-            selected_name = self.dlg.get_map_name()
-            if selected_name is None:
-                return show_error_dialog("No name selected")
-
-            selected_layer = self.dlg.get_selected_layer()
-            if selected_layer is None:
-                return show_error_dialog("No layer selected")
-            file_path = selected_layer.dataProvider().dataSourceUri().split('|')[0]
-
-            selected_folder = self.dlg.get_selected_folder()
-            if selected_folder is None:
-                return show_error_dialog("No folder selected")
-
-            selected_public = self.dlg.get_selected_public()
-
-            if file_path.lower().endswith('.shp'):  # Shapefiles
-                base_dir = os.path.dirname(file_path)
-                file_name = os.path.splitext(os.path.basename(file_path))[0]
-
-                # Create temporary zip file
-                temp_zip = tempfile.mktemp(suffix='.zip')
-
-                with zipfile.ZipFile(temp_zip, 'w') as zipf:
-                    # Find all files with same basename but different extensions
-                    pattern = os.path.join(base_dir, file_name + '.*')
-                    shapefile_parts = glob.glob(pattern)
-
-                    for part_file in shapefile_parts:
-                        # Add file to zip with just the filename (not full path)
-                        zipf.write(part_file, os.path.basename(part_file))
-
-                # Upload layer to MapHub
-                client.maps.upload_map(
-                    map_name=selected_name,
-                    folder_id=selected_folder["id"],
-                    public=selected_public,
-                    path=temp_zip,
-                )
-
-            else:
-                # Upload layer to MapHub
-                client.maps.upload_map(
-                    map_name=selected_name,
-                    folder_id=selected_folder["id"],
-                    public=selected_public,
-                    path=file_path,
-                )
-
-        return None
+    def upload_map(self, checked=False):
+        """Show upload map dialog to upload a map."""
+        dlg = UploadMapDialog(self.iface, self.iface.mainWindow())
+        result = dlg.exec_()

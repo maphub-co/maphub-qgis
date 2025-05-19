@@ -39,6 +39,16 @@ def handled_exceptions(func):
                     f"{e.message}\nUpgrade to premium here: https://maphub.co/dashboard/subscription",
                     "Premium account required."
                 )
+            elif e.status_code == 401:
+                show_error_dialog(
+                    f"{e.message}\nPlease check your API key and try again.",
+                    "Invalid API key."
+                )
+            elif e.status_code == 403:
+                show_error_dialog(
+                    f"{e.message}\nMake sure the currently used API key has the correct permissions.",
+                    "Permission denied."
+                )
             else:
                 show_error_dialog(f"Code {e.status_code}: {e.message}", "Error uploading map to MapHub")
         except Exception as e:
