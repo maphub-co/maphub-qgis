@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>CreateProjectDialogBase</class>
- <widget class="QDialog" name="CreateProjectDialogBase">
+ <class>CreateFolderDialogBase</class>
+ <widget class="QDialog" name="CreateFolderDialogBase">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -11,14 +11,14 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MapHub: Create New Project</string>
+   <string>MapHub: Create New Folder</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QLabel" name="label_info">
      <property name="text">
-      <string>Create a new project by specifying its name below.
-Projects will be saved in your default workspace location.</string>
+      <string>Create a new folder by specifying its name below.
+Folders will be saved in your default workspace location.</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>
@@ -31,16 +31,16 @@ Projects will be saved in your default workspace location.</string>
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout">
      <item>
-      <widget class="QLabel" name="label_projectName">
+      <widget class="QLabel" name="label_folderName">
        <property name="text">
-        <string>Project Name:</string>
+        <string>Folder Name:</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QLineEdit" name="lineEdit_projectName">
+      <widget class="QLineEdit" name="lineEdit_folderName">
        <property name="placeholderText">
-        <string>Enter project name</string>
+        <string>Enter folder name</string>
        </property>
       </widget>
      </item>
@@ -76,7 +76,7 @@ Projects will be saved in your default workspace location.</string>
   <connection>
    <sender>button_box</sender>
    <signal>accepted()</signal>
-   <receiver>CreateProjectDialogBase</receiver>
+   <receiver>CreateFolderDialogBase</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -92,7 +92,7 @@ Projects will be saved in your default workspace location.</string>
   <connection>
    <sender>button_box</sender>
    <signal>rejected()</signal>
-   <receiver>CreateProjectDialogBase</receiver>
+   <receiver>CreateFolderDialogBase</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">

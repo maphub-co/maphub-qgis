@@ -12,7 +12,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
 from .ui.GetMapDialog import GetMapDialog
-from .ui.CreateProjectDialog import CreateProjectDialog
+from .ui.CreateFolderDialog import CreateFolderDialog
 from .utils import handled_exceptions, show_error_dialog
 from .ui.ApiKeyDialog import ApiKeyDialog
 from .ui.UploadMapDialog import UploadMapDialog
@@ -168,8 +168,8 @@ class MapHubPlugin:
 
         self.add_action(
             icon_path,
-            text=self.tr(u'Create project'),
-            callback=self.create_project,
+            text=self.tr(u'Create folder'),
+            callback=self.create_folder,
             parent=self.iface.mainWindow(),
             add_to_toolbar=False
         )
@@ -214,8 +214,8 @@ class MapHubPlugin:
         return api_key
 
     @handled_exceptions
-    def create_project(self, checked=False):
-        dlg = CreateProjectDialog(self.iface.mainWindow())
+    def create_folder(self, checked=False):
+        dlg = CreateFolderDialog(self.iface.mainWindow())
         dlg.exec_()
 
     @handled_exceptions
@@ -264,9 +264,9 @@ class MapHubPlugin:
                 return show_error_dialog("No layer selected")
             file_path = selected_layer.dataProvider().dataSourceUri().split('|')[0]
 
-            selected_project = self.dlg.get_selected_project()
-            if selected_project is None:
-                return show_error_dialog("No project selected")
+            selected_folder = self.dlg.get_selected_folder()
+            if selected_folder is None:
+                return show_error_dialog("No folder selected")
 
             selected_public = self.dlg.get_selected_public()
 
@@ -287,18 +287,20 @@ class MapHubPlugin:
                         zipf.write(part_file, os.path.basename(part_file))
 
                 # Upload layer to MapHub
-                client.upload_map(
+                client.maps.upload_map(
                     map_name=selected_name,
-                    project_id=selected_project["id"],
+                    folder_id=selected_folder["id"],
                     public=selected_public,
                     path=temp_zip,
                 )
 
             else:
                 # Upload layer to MapHub
-                client.upload_map(
+                client.maps.upload_map(
                     map_name=selected_name,
-                    project_id=selected_project["id"],
+                    folder_id=selected_folder["id"],
                     public=selected_public,
                     path=file_path,
                 )
+
+        return None

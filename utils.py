@@ -32,7 +32,7 @@ def handled_exceptions(func):
             if e.status_code == 500:
                 show_error_dialog(
                     "Error from the MapHub server. A Bug report is sent and the issue will be investigated asap.",
-                    "Error uploading map to MapHub"
+                    "MapHub API Error"
                 )
             elif e.status_code == 402:
                 show_error_dialog(

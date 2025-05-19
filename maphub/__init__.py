@@ -10,10 +10,6 @@ Example:
 
 # Import the main client class and any important submodules
 from .client import MapHubClient
-from importlib import metadata
-
-
-__version__ = metadata.version(__package__ or __name__)
 __author__ = "MapHub"
 __license__ = "MIT"
 

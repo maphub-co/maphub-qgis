@@ -35,7 +35,7 @@ class ThumbnailLoader(QThread):
 
     def run(self):
         try:
-            thumb_data = get_maphub_client().get_thumbnail(self.map_id)
+            thumb_data = get_maphub_client().maps.get_thumbnail(self.map_id)
             self.thumbnail_loaded.emit(self.map_id, QByteArray(thumb_data))
         except Exception as e:
             print(f"Error loading thumbnail for map {self.map_id}: {e}")
@@ -64,10 +64,10 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         self.clear_list_layout()
 
         # Initialize UI components
-        self._populate_projects_combobox()
+        self._populate_folders_combobox()
 
         # Connect signals
-        self.comboBox_project.currentIndexChanged.connect(self.on_project_selected)
+        self.comboBox_folder.currentIndexChanged.connect(self.on_folder_selected)
         self.tabWidget_map_type.currentChanged.connect(self.on_tab_changed)
         self.pushButton_search.clicked.connect(self.on_search_clicked)
         self.lineEdit_search.returnPressed.connect(self.on_search_clicked)
@@ -108,12 +108,12 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         """Handle tab change event"""
         self.clear_list_layout()
 
-        if index == 0:  # Project Maps tab
-            # If a project is already selected, load its maps
-            if self.comboBox_project.count() > 0:
-                self.on_project_selected(self.comboBox_project.currentIndex())
+        if index == 0:  # Folder Maps tab
+            # If a folder is already selected, load its maps
+            if self.comboBox_folder.count() > 0:
+                self.on_folder_selected(self.comboBox_folder.currentIndex())
             else:
-                no_maps_label = QLabel(f"You dont have any projects yet. Check out the public maps instead.")
+                no_maps_label = QLabel(f"You dont have any folders yet. Check out the public maps instead.")
                 no_maps_label.setAlignment(Qt.AlignCenter)
                 self.list_layout.addWidget(no_maps_label)
 
@@ -121,15 +121,15 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             # Load public maps with default sorting (Recent)
             self.load_public_maps()
 
-    def on_project_selected(self, index):
-        """Handle project selection change"""
+    def on_folder_selected(self, index):
+        """Handle folder selection change"""
         if index < 0:
             return
 
-        # Only respond if we're on the project maps tab
+        # Only respond if we're on the folder maps tab
         if self.tabWidget_map_type.currentIndex() == 0:
-            project_id = self.comboBox_project.itemData(index)
-            self.load_project_maps(project_id)
+            folder_id = self.comboBox_folder.itemData(index)
+            self.load_folder_maps(folder_id)
 
     def on_search_clicked(self):
         """Handle search button click"""
@@ -162,13 +162,13 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             return "stars"
         return "recent"  # Default
 
-    def load_project_maps(self, project_id):
-        """Load maps for a project"""
+    def load_folder_maps(self, folder_id):
+        """Load maps for a folder"""
         # Clear any existing items
         self.clear_list_layout()
 
         # Get maps
-        maps = get_maphub_client().get_project_maps(project_id)
+        maps = get_maphub_client().folder.get_folder_maps(folder_id)
 
         self.load_maps(maps)
 
@@ -179,7 +179,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             self.clear_list_layout()
 
         # Get maps
-        public_maps_response = get_maphub_client().get_public_maps(sort_by=sort_by, page=page)
+        public_maps_response = get_maphub_client().maps.get_public_maps(sort_by=sort_by, page=page)
         maps = public_maps_response.get('maps', [])
         pagination = public_maps_response.get('pagination', {})
 
@@ -217,7 +217,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             self.load_public_maps(sort_by)
             return
 
-        maps = get_maphub_client().search_maps(search_term)
+        maps = get_maphub_client().maps.search_maps(search_term)
 
         self.load_maps(maps)
 
@@ -232,17 +232,21 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             for map_data in maps:
                 self.add_map_item(map_data)
 
-    def _populate_projects_combobox(self):
+    def _populate_folders_combobox(self):
         """Populate the options combobox with items returned from a function."""
-        self.comboBox_project.clear()
+        self.comboBox_folder.clear()
 
-        projects = get_maphub_client().get_projects()
+        # Get the root folder to find child folders
+        client = get_maphub_client()
+        personal_workspace = client.workspace.get_personal_workspace()
+        root_folder = client.folder.get_root_folder(personal_workspace["id"])
+        folders = root_folder.get("child_folders", [])
 
-        for project in projects:
-            project_id = project.get('id')
-            project_name = project.get('name', 'Unnamed Project')
+        for folder in folders:
+            folder_id = folder.get('id')
+            folder_name = folder.get('name', 'Unnamed Folder')
 
-            self.comboBox_project.addItem(project_name, project_id)
+            self.comboBox_folder.addItem(folder_name, folder_id)
 
     def add_map_item(self, map_data):
         """Create a frame for each list item."""
@@ -363,7 +367,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         if not file_path:
             return
 
-        get_maphub_client().download_map(map_data['id'], file_path)
+        get_maphub_client().maps.download_map(map_data['id'], file_path)
 
         # Adding downloaded file to layers
         if not os.path.exists(file_path):
@@ -389,7 +393,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
     def on_tiling_clicked(self, map_data):
         print(f"Viewing details for map: {map_data.get('name')}\n{map_data}")
 
-        layer_info = get_maphub_client().get_layer_info(map_data['id'])
+        layer_info = get_maphub_client().maps.get_layer_info(map_data['id'])
         tiler_url = layer_info['tiling_url']
         layer_name = map_data.get('name', f"Tiled Map {map_data['id']}")
 

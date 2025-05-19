@@ -54,4 +54,4 @@ class FolderEndpoint(BaseEndpoint):
                  a map associated with the specified folder.
         :rtype: List[Dict[str, Any]]
         """
-        return self._make_request("GET", f"/maps", params={"folder_id": folder_id}).json()
+        return self.get_folder(folder_id)["map_infos"]

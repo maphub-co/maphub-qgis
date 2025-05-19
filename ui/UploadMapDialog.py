@@ -8,7 +8,7 @@ from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
-from .CreateProjectDialog import CreateProjectDialog
+from .CreateFolderDialog import CreateFolderDialog
 from ..utils import get_maphub_client
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
@@ -34,27 +34,27 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Connect signals
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
-        self.btn_create_project.clicked.connect(self.open_create_project_dialog)
+        self.btn_create_folder.clicked.connect(self.open_create_folder_dialog)
 
         self._populate_layers_combobox()
-        self._populate_projects_combobox()
+        self._populate_folders_combobox()
 
-    def open_create_project_dialog(self):
-        """Open the Create Project dialog and update projects if a new one is created."""
-        dialog = CreateProjectDialog(self.iface.mainWindow())
+    def open_create_folder_dialog(self):
+        """Open the Create Folder dialog and update folders if a new one is created."""
+        dialog = CreateFolderDialog(self.iface.mainWindow())
         result = dialog.exec_()
 
-        new_project = dialog.project
+        new_folder = dialog.folder
 
-        # Update selectable project list.
-        self._populate_projects_combobox()
+        # Update selectable folder list.
+        self._populate_folders_combobox()
 
-        # Select the newly created project
-        if result and new_project is not None:
-            for i in range(self.comboBox_project.count()):
-                project = self.comboBox_project.itemData(i)
-                if project.get("id") == new_project.get("id"):
-                    self.comboBox_project.setCurrentIndex(i)
+        # Select the newly created folder
+        if result and new_folder is not None:
+            for i in range(self.comboBox_folder.count()):
+                folder = self.comboBox_folder.itemData(i)
+                if folder.get("id") == new_folder.get("id"):
+                    self.comboBox_folder.setCurrentIndex(i)
                     break
 
     def _populate_layers_combobox(self):
@@ -87,24 +87,29 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Set initial value if there's a layer selected
         update_map_name(0)
 
-    def _populate_projects_combobox(self):
+    def _populate_folders_combobox(self):
         """Populate the options combobox with items returned from a function."""
-        self.comboBox_project.clear()
+        self.comboBox_folder.clear()
 
-        projects = get_maphub_client().get_projects()
-        if len(projects) == 0:
-            raise Exception("You do not yet have any projects. Please create one on https://maphub.co/dashboard/projects and try again.")
+        # Get the root folder to find child folders
+        client = get_maphub_client()
+        personal_workspace = client.workspace.get_personal_workspace()
+        root_folder = client.folder.get_root_folder(personal_workspace["id"])
+        folders = root_folder.get("child_folders", [])
 
-        for project in projects:
-            self.comboBox_project.addItem(project["name"], project)
+        if len(folders) == 0:
+            raise Exception("You do not yet have any folders. Please create one using the 'Create New Folder' button and try again.")
+
+        for folder in folders:
+            self.comboBox_folder.addItem(folder["name"], folder)
 
     def get_selected_layer(self):
         """Return the currently selected layer."""
         return self.comboBox_layer.currentData()
 
-    def get_selected_project(self):
-        """Return the currently selected option."""
-        return self.comboBox_project.currentData()
+    def get_selected_folder(self):
+        """Return the currently selected folder."""
+        return self.comboBox_folder.currentData()
 
     def get_selected_public(self):
         """Return whether the map should be uploaded publicly."""

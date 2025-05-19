@@ -35,21 +35,21 @@
                 <widget class="QLineEdit" name="lineEdit_map_name"/>
             </item>
             <item>
-                <widget class="QLabel" name="label_project">
+                <widget class="QLabel" name="label_folder">
                     <property name="text">
-                        <string>Select MapHub project:</string>
+                        <string>Select MapHub folder:</string>
                     </property>
                 </widget>
             </item>
             <item>
-                <layout class="QHBoxLayout" name="horizontalLayout_project">
+                <layout class="QHBoxLayout" name="horizontalLayout_folder">
                     <item>
-                        <widget class="QComboBox" name="comboBox_project"/>
+                        <widget class="QComboBox" name="comboBox_folder"/>
                     </item>
                     <item>
-                        <widget class="QPushButton" name="btn_create_project">
+                        <widget class="QPushButton" name="btn_create_folder">
                             <property name="text">
-                                <string>Create New Project</string>
+                                <string>Create New Folder</string>
                             </property>
                         </widget>
                     </item>

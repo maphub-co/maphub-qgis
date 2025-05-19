@@ -42,22 +42,22 @@
      <property name="currentIndex">
       <number>0</number>
      </property>
-     <widget class="QWidget" name="tab_project_maps">
+     <widget class="QWidget" name="tab_folder_maps">
       <attribute name="title">
        <string>Personal Maps</string>
       </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_project">
+      <layout class="QVBoxLayout" name="verticalLayout_folder">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_project">
+        <layout class="QHBoxLayout" name="horizontalLayout_folder">
          <item>
-          <widget class="QLabel" name="label_project">
+          <widget class="QLabel" name="label_folder">
            <property name="text">
-            <string>Select Project:</string>
+            <string>Select Folder:</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QComboBox" name="comboBox_project"/>
+          <widget class="QComboBox" name="comboBox_folder"/>
          </item>
         </layout>
        </item>
