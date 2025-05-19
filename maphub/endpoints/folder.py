@@ -55,3 +55,16 @@ class FolderEndpoint(BaseEndpoint):
         :rtype: List[Dict[str, Any]]
         """
         return self.get_folder(folder_id)["map_infos"]
+
+    def get_all_folders(self, workspace_id: uuid.UUID) -> [Dict[str, Any]]:
+        """
+        Retrieves all folders associated with a given workspace ID.
+
+        :param workspace_id: The unique identifier of the workspace whose folders
+            are to be retrieved.
+        :type workspace_id: uuid.UUID
+        :return: A list of dictionaries containing folder information for the
+            specified workspace.
+        :rtype: list[Dict[str, Any]]
+        """
+        return self._make_request("GET", f"/folders/all?workspace_id={workspace_id}").json()
