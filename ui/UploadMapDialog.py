@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import glob
+import json
 import os
 import tempfile
 import zipfile
@@ -11,7 +12,7 @@ from qgis.PyQt.QtGui import QIcon, QCursor
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
-from ..utils import get_maphub_client, handled_exceptions, show_error_dialog
+from ..utils import get_maphub_client, handled_exceptions, show_error_dialog, get_layer_styles_as_json
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'UploadMapDialog.ui'))
@@ -276,7 +277,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         self.closingPlugin.emit()
         event.accept()
 
-    @handled_exceptions
+    # @handled_exceptions
     def upload_map(self):
         client = get_maphub_client()
 
@@ -295,6 +296,15 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         selected_public = self.checkBox_public.isChecked()
 
+        # Extract style information
+        try:
+            visuals = get_layer_styles_as_json(selected_layer, {})
+        except Exception as e:
+            # If style extraction fails, log the error but continue with upload
+            print(f"Warning: Failed to extract layer style: {str(e)}")
+            show_error_dialog(f"Warning: Failed to extract layer style: {str(e)}\nThe map will be uploaded without style information.", "Style Export Warning")
+            visuals = None
+
         if file_path.lower().endswith('.shp') or file_path.lower().endswith('.shx') or file_path.lower().endswith('.dbf'):  # Shapefiles
             base_dir = os.path.dirname(file_path)
             file_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -311,8 +321,8 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
                     # Add file to zip with just the filename (not full path)
                     zipf.write(part_file, os.path.basename(part_file))
 
-            # Upload layer to MapHub
-            client.maps.upload_map(
+            # Upload layer to MapHub with style information
+            version = client.maps.upload_map(
                 map_name=selected_name,
                 folder_id=self.selected_folder_id,
                 public=selected_public,
@@ -320,12 +330,15 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
             )
 
         else:
-            # Upload layer to MapHub
-            client.maps.upload_map(
+            # Upload layer to MapHub with style information
+            version = client.maps.upload_map(
                 map_name=selected_name,
                 folder_id=self.selected_folder_id,
                 public=selected_public,
                 path=file_path,
             )
+
+        if visuals is not None:
+            client.maps.set_visuals(version["map_id"], visuals)
 
         return None

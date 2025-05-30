@@ -23,7 +23,7 @@ from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
-from ..utils import get_maphub_client, handled_exceptions
+from ..utils import get_maphub_client, handled_exceptions, apply_style_to_layer
 
 
 class ThumbnailLoader(QThread):
@@ -480,7 +480,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
     @handled_exceptions
     def on_download_clicked(self, map_data):
-        print(f"Downloading map: {map_data.get('name')}\n{map_data}")
+        print(f"Downloading map: {map_data.get('name')}")
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -509,6 +509,11 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         if not layer.isValid():
             raise Exception(f"The downloaded map could not be added as a layer. Please check the file: {file_path}")
         else:
+            # Apply style if available
+            if 'visuals' in map_data and map_data['visuals']:
+                visuals = map_data['visuals']
+                apply_style_to_layer(layer, visuals)
+
             QMessageBox.information(
                 self,
                 "Download Complete",
@@ -517,7 +522,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
     @handled_exceptions
     def on_tiling_clicked(self, map_data):
-        print(f"Viewing details for map: {map_data.get('name')}\n{map_data}")
+        print(f"Viewing details for map: {map_data.get('name')}")
 
         layer_info = get_maphub_client().maps.get_layer_info(map_data['id'])
         tiler_url = layer_info['tiling_url']
@@ -530,6 +535,8 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             vector_layer = QgsVectorTileLayer(vector_tile_layer_string, layer_name)
             if vector_layer.isValid():
                 QgsProject.instance().addMapLayer(vector_layer)
+                if 'visuals' in map_data and map_data['visuals']:
+                    apply_style_to_layer(vector_layer, map_data['visuals'])
                 self.iface.messageBar().pushSuccess("Success", f"Vector tile layer '{layer_name}' added.")
             else:
                 self.iface.messageBar().pushWarning("Warning", f"Could not add vector tile layer from URL: {tiler_url}")
@@ -540,6 +547,8 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
             if raster_layer.isValid():
                 QgsProject.instance().addMapLayer(raster_layer)
+                if 'visuals' in map_data and map_data['visuals']:
+                    apply_style_to_layer(raster_layer, map_data['visuals'])
                 self.iface.messageBar().pushSuccess("Success", f"XYZ tile layer '{layer_name}' added.")
             else:
                 self.iface.messageBar().pushWarning("Warning", f"Could not add XYZ tile layer from URL: {tiler_url}")
