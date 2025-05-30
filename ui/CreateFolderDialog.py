@@ -15,15 +15,20 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'CreateFo
 class CreateFolderDialog(QtWidgets.QDialog, FORM_CLASS):
     closingPlugin = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, workspace_id=None, parent_folder_id=None):
         """Constructor."""
         super(CreateFolderDialog, self).__init__(parent)
         # Set up the user interface from Designer through FORM_CLASS.
         self.setupUi(self)
 
-        # Get default workspace from settings
-        self.settings = QSettings()
-        self.workspace = self.settings.value("project_manager/workspace", "")
+        # Store workspace and parent folder IDs
+        self.workspace_id = workspace_id
+        self.parent_folder_id = parent_folder_id
+
+        # Get default workspace from settings if not provided
+        if self.workspace_id is None:
+            self.settings = QSettings()
+            self.workspace_id = self.settings.value("project_manager/workspace", "")
 
         # Connect signals to slots
         self.button_box.accepted.connect(self.create_folder)
@@ -39,14 +44,22 @@ class CreateFolderDialog(QtWidgets.QDialog, FORM_CLASS):
         if not folder_name:
             raise Exception("Folder name needs to be set.")
 
-        # Get the root folder to use as parent
         client = get_maphub_client()
-        personal_workspace = client.workspace.get_personal_workspace()
-        root_folder = client.folder.get_root_folder(personal_workspace["id"])
-        parent_folder_id = root_folder["folder"]["id"]
-        
+
+        # Use provided parent folder ID if available
+        if self.parent_folder_id is None:
+            # If no parent folder ID is provided, use the root folder of the workspace
+            if self.workspace_id is None:
+                # If no workspace ID is provided, use the personal workspace
+                personal_workspace = client.workspace.get_personal_workspace()
+                self.workspace_id = personal_workspace["id"]
+
+            # Get the root folder of the workspace
+            root_folder = client.folder.get_root_folder(self.workspace_id)
+            self.parent_folder_id = root_folder["folder"]["id"]
+
         # Create the folder
-        folder = client.folder.create_folder(folder_name, parent_folder_id)
+        folder = client.folder.create_folder(folder_name, self.parent_folder_id)
         self.folder = folder
 
     def closeEvent(self, event):
