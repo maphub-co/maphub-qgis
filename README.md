@@ -28,6 +28,6 @@ MapHub is a community hub for GIS users to host, visualize, and share geospatial
 - Active MapHub account
 
 ## Support
-For issues, questions, or feature requests, please visit our [tracker](https://gitlab.com/meteoryPA/maphub-qgis-plugin) or contact us on [Discord](https://discord.gg/ufqVjqpVGw).
+For issues, questions, or feature requests, please visit our [tracker](https://github.com/meteory-org/maphub-qgis) or contact us on [Discord](https://discord.gg/ufqVjqpVGw).
 ## License
 This plugin is developed by MapHub (maphub@meteory.eu) and is Licensed under a MIT License.
