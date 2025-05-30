@@ -152,13 +152,29 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
     def add_navigation_controls(self):
         """Add navigation controls for folder browsing"""
         nav_frame = QtWidgets.QFrame()
+        nav_frame.setStyleSheet("background-color: #f0f0f0; border-radius: 4px;")
         nav_layout = QtWidgets.QHBoxLayout(nav_frame)
+        nav_layout.setContentsMargins(5, 5, 5, 5)
+        nav_layout.setSpacing(5)
 
         # Back button
         back_button = QPushButton("← Back")
+        back_button.setMaximumWidth(80)
         back_button.clicked.connect(self.navigate_back)
         back_button.setEnabled(len(self.folder_history) > 1)
         nav_layout.addWidget(back_button)
+
+        # Current folder path
+        if self.folder_history:
+            # Get the current folder details
+            folder_id = self.folder_history[-1]
+            folder_details = get_maphub_client().folder.get_folder(folder_id)
+            folder_name = folder_details["folder"].get("name", "Unknown Folder")
+
+            # Create a label for the current folder
+            current_folder_label = QtWidgets.QLabel(f"Current folder: {folder_name}")
+            current_folder_label.setStyleSheet("font-weight: bold;")
+            nav_layout.addWidget(current_folder_label)
 
         # Add spacer
         nav_layout.addItem(QtWidgets.QSpacerItem(
@@ -311,35 +327,31 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         item_frame = QtWidgets.QFrame()
         item_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
         item_frame.setFrameShadow(QtWidgets.QFrame.Raised)
-        item_frame.setMinimumHeight(80)
+        item_frame.setMinimumHeight(40)
 
-        # Create layout for the item
+        # Set margin and spacing for a more compact look
         item_layout = QtWidgets.QHBoxLayout(item_frame)
+        item_layout.setContentsMargins(5, 5, 5, 5)
+        item_layout.setSpacing(5)
 
         # Add folder icon
         folder_icon_label = QtWidgets.QLabel()
-        folder_icon_label.setFixedSize(64, 64)
+        folder_icon_label.setFixedSize(24, 24)
         folder_icon_label.setScaledContents(True)
 
-        # Use a folder icon
-        folder_icon = QIcon(":/plugins/maphub/icon.png")  # Using the plugin icon as a placeholder
-        pixmap = folder_icon.pixmap(QSize(64, 64))
+        # Use a standard folder icon from Qt
+        folder_icon = QIcon.fromTheme("folder", QtWidgets.QApplication.style().standardIcon(QtWidgets.QStyle.SP_DirIcon))
+        pixmap = folder_icon.pixmap(QSize(24, 24))
         folder_icon_label.setPixmap(pixmap)
 
         item_layout.addWidget(folder_icon_label)
-
-        # Add description section
-        desc_layout = QtWidgets.QVBoxLayout()
 
         # Folder name
         name_label = QtWidgets.QLabel(folder_data.get('name', 'Unnamed Folder'))
         font = name_label.font()
         font.setBold(True)
         name_label.setFont(font)
-        desc_layout.addWidget(name_label)
-
-        # Add description layout to main layout
-        item_layout.addLayout(desc_layout)
+        item_layout.addWidget(name_label)
 
         # Add spacer
         item_layout.addItem(QtWidgets.QSpacerItem(
@@ -347,6 +359,11 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         # Store folder_id in the frame for later reference
         item_frame.setProperty("folder_id", folder_data['id'])
+
+        # Check if this is the current folder
+        if self.folder_history and folder_data['id'] == self.folder_history[-1]:
+            # Highlight the current folder
+            item_frame.setStyleSheet("background-color: #e0f0ff;")
 
         # Make the entire frame clickable
         item_frame.setCursor(QCursor(Qt.PointingHandCursor))
@@ -360,18 +377,20 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         item_frame = QtWidgets.QFrame()
         item_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
         item_frame.setFrameShadow(QtWidgets.QFrame.Raised)
-        item_frame.setMinimumHeight(128)
+        item_frame.setMinimumHeight(96)
 
         # Create layout for the item
         item_layout = QtWidgets.QHBoxLayout(item_frame)
+        item_layout.setContentsMargins(5, 5, 5, 5)
+        item_layout.setSpacing(5)
 
         # Add image
         image_label = QtWidgets.QLabel()
-        image_label.setFixedSize(128, 128)
+        image_label.setFixedSize(96, 96)
         image_label.setScaledContents(True)
 
         # Set a placeholder image while loading
-        placeholder_pixmap = QPixmap(128, 128)
+        placeholder_pixmap = QPixmap(96, 96)
         placeholder_pixmap.fill(QColor(200, 200, 200))  # Light gray
         image_label.setPixmap(placeholder_pixmap)
 
