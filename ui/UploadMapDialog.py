@@ -295,7 +295,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         selected_public = self.checkBox_public.isChecked()
 
-        if file_path.lower().endswith('.shp'):  # Shapefiles
+        if file_path.lower().endswith('.shp') or file_path.lower().endswith('.shx') or file_path.lower().endswith('.dbf'):  # Shapefiles
             base_dir = os.path.dirname(file_path)
             file_name = os.path.splitext(os.path.basename(file_path))[0]
 
