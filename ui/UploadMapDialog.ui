@@ -6,8 +6,8 @@
             <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>400</width>
-                <height>300</height>
+                <width>600</width>
+                <height>500</height>
             </rect>
         </property>
         <property name="windowTitle">
@@ -35,17 +35,24 @@
                 <widget class="QLineEdit" name="lineEdit_map_name"/>
             </item>
             <item>
+                <widget class="QLabel" name="label_workspace">
+                    <property name="text">
+                        <string>Select Workspace:</string>
+                    </property>
+                </widget>
+            </item>
+            <item>
+                <widget class="QComboBox" name="comboBox_workspace"/>
+            </item>
+            <item>
                 <widget class="QLabel" name="label_folder">
                     <property name="text">
-                        <string>Select MapHub folder:</string>
+                        <string>Select Destination Folder:</string>
                     </property>
                 </widget>
             </item>
             <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_folder">
-                    <item>
-                        <widget class="QComboBox" name="comboBox_folder"/>
-                    </item>
                     <item>
                         <widget class="QPushButton" name="btn_create_folder">
                             <property name="text">
@@ -56,6 +63,37 @@
                 </layout>
             </item>
             <item>
+                <widget class="QScrollArea" name="scrollArea">
+                    <property name="widgetResizable">
+                        <bool>true</bool>
+                    </property>
+                    <widget class="QWidget" name="scrollAreaWidgetContents">
+                        <layout class="QVBoxLayout" name="verticalLayout_2">
+                            <item>
+                                <widget class="QWidget" name="folderContainer" native="true">
+                                    <layout class="QVBoxLayout" name="folderLayout">
+                                        <!-- Folder items will be added here programmatically -->
+                                    </layout>
+                                </widget>
+                            </item>
+                            <item>
+                                <spacer name="verticalSpacer_2">
+                                    <property name="orientation">
+                                        <enum>Qt::Vertical</enum>
+                                    </property>
+                                    <property name="sizeHint" stdset="0">
+                                        <size>
+                                            <width>20</width>
+                                            <height>40</height>
+                                        </size>
+                                    </property>
+                                </spacer>
+                            </item>
+                        </layout>
+                    </widget>
+                </widget>
+            </item>
+            <item>
                 <widget class="QCheckBox" name="checkBox_public">
                     <property name="text">
                         <string>Upload map publicly</string>
@@ -64,19 +102,6 @@
                         <bool>false</bool>
                     </property>
                 </widget>
-            </item>
-            <item>
-                <spacer name="verticalSpacer">
-                    <property name="orientation">
-                        <enum>Qt::Vertical</enum>
-                    </property>
-                    <property name="sizeHint" stdset="0">
-                        <size>
-                            <width>20</width>
-                            <height>40</height>
-                        </size>
-                    </property>
-                </spacer>
             </item>
             <item>
                 <widget class="QDialogButtonBox" name="button_box">

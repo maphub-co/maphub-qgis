@@ -6,15 +6,15 @@ import zipfile
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
-from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import pyqtSignal, Qt, QSize
+from qgis.PyQt.QtGui import QIcon, QCursor
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
 from ..utils import get_maphub_client, handled_exceptions, show_error_dialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
-FORM_CLASS, _ = uic.loadUiType(os.path.join(
-    os.path.dirname(__file__), 'UploadMapDialog.ui'))
+FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'UploadMapDialog.ui'))
 
 
 class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
@@ -32,31 +32,54 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         self.iface = iface
 
+        # Initialize folder navigation history
+        self.folder_history = []
+        self.selected_folder_id = None
+
+        # Get the folder layout
+        self.folder_layout = self.findChild(QtWidgets.QVBoxLayout, 'folderLayout')
+
         # Connect signals
         self.button_box.accepted.connect(self.upload_map)
         self.button_box.rejected.connect(self.reject)
         self.btn_create_folder.clicked.connect(self.open_create_folder_dialog)
 
+        # Initialize UI components
         self._populate_layers_combobox()
-        self._populate_folders_combobox()
+        self._populate_workspaces_combobox()
+
+        # Connect workspace combobox
+        self.comboBox_workspace.currentIndexChanged.connect(self.on_workspace_selected)
+
+        # Select the first workspace if available
+        self.on_workspace_selected(0)
 
     def open_create_folder_dialog(self):
         """Open the Create Folder dialog and update folders if a new one is created."""
-        dialog = CreateFolderDialog(self.iface.mainWindow())
+        # Get current workspace ID
+        workspace_id = None
+        if self.comboBox_workspace.currentIndex() >= 0:
+            workspace_id = self.comboBox_workspace.itemData(self.comboBox_workspace.currentIndex())
+
+        # Get current folder ID (if any)
+        parent_folder_id = None
+        if len(self.folder_history) > 0:
+            parent_folder_id = self.folder_history[-1]
+
+        # Open dialog with current workspace and folder
+        dialog = CreateFolderDialog(
+            parent=self.iface.mainWindow(),
+            workspace_id=workspace_id,
+            parent_folder_id=parent_folder_id
+        )
         result = dialog.exec_()
 
         new_folder = dialog.folder
 
-        # Update selectable folder list.
-        self._populate_folders_combobox()
-
-        # Select the newly created folder
-        if result and new_folder is not None:
-            for i in range(self.comboBox_folder.count()):
-                folder = self.comboBox_folder.itemData(i)
-                if folder.get("id") == new_folder.get("id"):
-                    self.comboBox_folder.setCurrentIndex(i)
-                    break
+        # Reload the current folder to show the new folder
+        if result and new_folder is not None and len(self.folder_history) > 0:
+            current_folder_id = self.folder_history[-1]
+            self.load_folder_contents(current_folder_id)
 
     def _populate_layers_combobox(self):
         """Populate the layer combobox with available layers."""
@@ -88,21 +111,148 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Set initial value if there's a layer selected
         update_map_name(0)
 
-    def _populate_folders_combobox(self):
-        """Populate the options combobox with items returned from a function."""
-        self.comboBox_folder.clear()
+    def _populate_workspaces_combobox(self):
+        """Populate the workspace combobox with available workspaces."""
+        self.comboBox_workspace.clear()
 
-        # Get the root folder to find child folders
+        # Get workspaces
         client = get_maphub_client()
-        personal_workspace = client.workspace.get_personal_workspace()
-        root_folder = client.folder.get_root_folder(personal_workspace["id"])
-        folders = root_folder.get("child_folders", [])
+        workspaces = client.workspace.get_workspaces()
 
-        if len(folders) == 0:
-            raise Exception("You do not yet have any folders. Please create one using the 'Create New Folder' button and try again.")
+        for workspace in workspaces:
+            workspace_id = workspace.get('id')
+            workspace_name = workspace.get('name', 'Unknown Workspace')
+            self.comboBox_workspace.addItem(workspace_name, workspace_id)
 
-        for folder in folders:
-            self.comboBox_folder.addItem(folder["name"], folder)
+    def on_workspace_selected(self, index):
+        """Handle workspace selection change"""
+        if index < 0:
+            return
+
+        workspace_id = self.comboBox_workspace.itemData(index)
+        root_folder = get_maphub_client().folder.get_root_folder(workspace_id)
+        folder_id = root_folder["folder"]["id"]
+
+        # Reset folder history
+        self.folder_history = [folder_id]
+        self.selected_folder_id = folder_id
+
+        # Load folder contents
+        self.load_folder_contents(folder_id)
+
+    def clear_folder_layout(self):
+        """Clear all widgets from the folder layout"""
+        for i in reversed(range(self.folder_layout.count())):
+            widget = self.folder_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def load_folder_contents(self, folder_id):
+        """Load folders for a folder"""
+        # Clear any existing items
+        self.clear_folder_layout()
+
+        # Get folder details including child folders
+        folder_details = get_maphub_client().folder.get_folder(folder_id)
+        child_folders = folder_details.get("child_folders", [])
+
+        # Add navigation controls if we have folder history
+        if self.folder_history:
+            self.add_navigation_controls()
+
+        # Display child folders
+        for folder in child_folders:
+            self.add_folder_item(folder)
+
+        # Update the selected folder ID
+        self.selected_folder_id = folder_id
+
+    def add_navigation_controls(self):
+        """Add navigation controls for folder browsing"""
+        nav_frame = QtWidgets.QFrame()
+        nav_layout = QtWidgets.QHBoxLayout(nav_frame)
+
+        # Back button
+        back_button = QtWidgets.QPushButton("← Back")
+        back_button.clicked.connect(self.navigate_back)
+        back_button.setEnabled(len(self.folder_history) > 1)
+        nav_layout.addWidget(back_button)
+
+        # Add spacer
+        nav_layout.addItem(QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+
+        # Add to layout before the list items
+        self.folder_layout.addWidget(nav_frame)
+
+    def navigate_back(self):
+        """Navigate back to the previous folder"""
+        if len(self.folder_history) > 1:
+            # Remove the current folder from history
+            self.folder_history.pop()
+
+            # Get the previous folder
+            previous_folder_id = self.folder_history[-1]
+
+            # Load the previous folder without adding to history
+            self.load_folder_contents(previous_folder_id)
+
+    def on_folder_clicked(self, folder_id):
+        """Handle click on a folder item"""
+        # Add the folder to the navigation history
+        self.folder_history.append(folder_id)
+
+        # Load the contents of the clicked folder
+        self.load_folder_contents(folder_id)
+
+    def add_folder_item(self, folder_data):
+        """Create a frame for each folder item."""
+        item_frame = QtWidgets.QFrame()
+        item_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        item_frame.setFrameShadow(QtWidgets.QFrame.Raised)
+        item_frame.setMinimumHeight(80)
+
+        # Create layout for the item
+        item_layout = QtWidgets.QHBoxLayout(item_frame)
+
+        # Add folder icon
+        folder_icon_label = QtWidgets.QLabel()
+        folder_icon_label.setFixedSize(64, 64)
+        folder_icon_label.setScaledContents(True)
+
+        # Use a folder icon
+        folder_icon = QIcon(":/plugins/maphub/icon.png")  # Using the plugin icon as a placeholder
+        pixmap = folder_icon.pixmap(QSize(64, 64))
+        folder_icon_label.setPixmap(pixmap)
+
+        item_layout.addWidget(folder_icon_label)
+
+        # Add description section
+        desc_layout = QtWidgets.QVBoxLayout()
+
+        # Folder name
+        name_label = QtWidgets.QLabel(folder_data.get('name', 'Unnamed Folder'))
+        font = name_label.font()
+        font.setBold(True)
+        name_label.setFont(font)
+        desc_layout.addWidget(name_label)
+
+        # Add description layout to main layout
+        item_layout.addLayout(desc_layout)
+
+        # Add spacer
+        item_layout.addItem(QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+
+        # Store folder_id in the frame for later reference
+        item_frame.setProperty("folder_id", folder_data['id'])
+
+        # Make the entire frame clickable
+        item_frame.setCursor(QCursor(Qt.PointingHandCursor))
+        item_frame.mousePressEvent = lambda event: self.on_folder_clicked(folder_data['id'])
+
+        # Add to layout
+        self.folder_layout.addWidget(item_frame)
 
     def closeEvent(self, event):
         """Override closeEvent to emit the closingPlugin signal."""
@@ -115,7 +265,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         # Get selected values
         selected_name = self.lineEdit_map_name.text()
-        if selected_name is None:
+        if not selected_name:
             return show_error_dialog("No name selected")
 
         selected_layer = self.comboBox_layer.currentData()
@@ -123,9 +273,8 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
             return show_error_dialog("No layer selected")
         file_path = selected_layer.dataProvider().dataSourceUri().split('|')[0]
 
-        selected_folder = self.comboBox_folder.currentData()
-        if selected_folder is None:
-            return show_error_dialog("No folder selected")
+        if self.selected_folder_id is None:
+            return show_error_dialog("No destination folder selected. Please select a folder.")
 
         selected_public = self.checkBox_public.isChecked()
 
@@ -148,7 +297,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
             # Upload layer to MapHub
             client.maps.upload_map(
                 map_name=selected_name,
-                folder_id=selected_folder["id"],
+                folder_id=self.selected_folder_id,
                 public=selected_public,
                 path=temp_zip,
             )
@@ -157,7 +306,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
             # Upload layer to MapHub
             client.maps.upload_map(
                 map_name=selected_name,
-                folder_id=selected_folder["id"],
+                folder_id=self.selected_folder_id,
                 public=selected_public,
                 path=file_path,
             )

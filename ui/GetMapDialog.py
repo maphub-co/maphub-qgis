@@ -42,8 +42,7 @@ class ThumbnailLoader(QThread):
 
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
-FORM_CLASS, _ = uic.loadUiType(os.path.join(
-    os.path.dirname(__file__), 'GetMapDialog.ui'))
+FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'GetMapDialog.ui'))
 
 
 class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
@@ -58,16 +57,20 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         self.iface = iface
         self.thumb_loaders = []
 
+        # Initialize folder navigation history
+        self.folder_history = []
+        self.current_folder = []
+
         self.list_layout = self.findChild(QtWidgets.QVBoxLayout, 'listLayout')
 
         # Clear layout
         self.clear_list_layout()
 
         # Initialize UI components
-        self._populate_folders_combobox()
+        self._populate_workspaces_combobox()
 
         # Connect signals
-        self.comboBox_folder.currentIndexChanged.connect(self.on_folder_selected)
+        self.comboBox_workspace.currentIndexChanged.connect(self.on_workspace_selected)
         self.tabWidget_map_type.currentChanged.connect(self.on_tab_changed)
         self.pushButton_search.clicked.connect(self.on_search_clicked)
         self.lineEdit_search.returnPressed.connect(self.on_search_clicked)
@@ -108,12 +111,12 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         """Handle tab change event"""
         self.clear_list_layout()
 
-        if index == 0:  # Folder Maps tab
-            # If a folder is already selected, load its maps
-            if self.comboBox_folder.count() > 0:
-                self.on_folder_selected(self.comboBox_folder.currentIndex())
+        if index == 0:  # workspace Maps tab
+            # If a workspace is already selected, load its maps
+            if self.comboBox_workspace.count() > 0:
+                self.on_workspace_selected(self.comboBox_workspace.currentIndex())
             else:
-                no_maps_label = QLabel(f"You dont have any folders yet. Check out the public maps instead.")
+                no_maps_label = QLabel(f"You dont have any workspaces yet. Check out the public maps instead.")
                 no_maps_label.setAlignment(Qt.AlignCenter)
                 self.list_layout.addWidget(no_maps_label)
 
@@ -121,15 +124,60 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             # Load public maps with default sorting (Recent)
             self.load_public_maps()
 
-    def on_folder_selected(self, index):
-        """Handle folder selection change"""
+    def on_workspace_selected(self, index):
+        """Handle workspace selection change"""
         if index < 0:
             return
 
-        # Only respond if we're on the folder maps tab
+        # Only respond if we're on the workspace maps tab
         if self.tabWidget_map_type.currentIndex() == 0:
-            folder_id = self.comboBox_folder.itemData(index)
+            workspace_id = self.comboBox_workspace.itemData(index)
+            root_folder = get_maphub_client().folder.get_root_folder(workspace_id)
+            folder_id = root_folder["folder"]["id"]
+
+            # Reset workspace history
+            self.folder_history = [folder_id]
+
+            # Load folder contents
             self.load_folder_maps(folder_id)
+
+    def on_folder_clicked(self, folder_id):
+        """Handle click on a folder item"""
+        # Add the folder to the navigation history
+        self.folder_history.append(folder_id)
+
+        # Load the contents of the clicked folder
+        self.load_folder_maps(folder_id)
+
+    def add_navigation_controls(self):
+        """Add navigation controls for folder browsing"""
+        nav_frame = QtWidgets.QFrame()
+        nav_layout = QtWidgets.QHBoxLayout(nav_frame)
+
+        # Back button
+        back_button = QPushButton("← Back")
+        back_button.clicked.connect(self.navigate_back)
+        back_button.setEnabled(len(self.folder_history) > 1)
+        nav_layout.addWidget(back_button)
+
+        # Add spacer
+        nav_layout.addItem(QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+
+        # Add to layout before the list items
+        self.list_layout.addWidget(nav_frame)
+
+    def navigate_back(self):
+        """Navigate back to the previous folder"""
+        if len(self.folder_history) > 1:
+            # Remove the current folder from history
+            self.folder_history.pop()
+
+            # Get the previous folder
+            previous_folder_id = self.folder_history[-1]
+
+            # Load the previous folder without adding to history
+            self.load_folder_maps(previous_folder_id)
 
     def on_search_clicked(self):
         """Handle search button click"""
@@ -163,13 +211,26 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         return "recent"  # Default
 
     def load_folder_maps(self, folder_id):
-        """Load maps for a folder"""
+        """Load maps and subfolders for a folder"""
         # Clear any existing items
         self.clear_list_layout()
 
-        # Get maps
-        maps = get_maphub_client().folder.get_folder_maps(folder_id)
+        # Get folder details including child folders
+        folder_details = get_maphub_client().folder.get_folder(folder_id)
+        child_folders = folder_details.get("child_folders", [])
 
+        # Add navigation controls if we have folder history
+        if self.folder_history:
+            self.add_navigation_controls()
+
+        # Display child folders first
+        for folder in child_folders:
+            self.add_folder_item(folder)
+
+        # Get maps
+        maps = folder_details.get("map_infos", [])
+
+        # Display maps
         self.load_maps(maps)
 
     def load_public_maps(self, sort_by="recent", page=1, append=False):
@@ -232,21 +293,67 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
             for map_data in maps:
                 self.add_map_item(map_data)
 
-    def _populate_folders_combobox(self):
+    def _populate_workspaces_combobox(self):
         """Populate the options combobox with items returned from a function."""
-        self.comboBox_folder.clear()
+        self.comboBox_workspace.clear()
 
-        # Get the root folder to find child folders
+        # Get the root workspace to find child workspaces
         client = get_maphub_client()
-        personal_workspace = client.workspace.get_personal_workspace()
-        root_folder = client.folder.get_root_folder(personal_workspace["id"])
-        folders = root_folder.get("child_folders", [])
+        workspaces = client.workspace.get_workspaces()
 
-        for folder in folders:
-            folder_id = folder.get('id')
-            folder_name = folder.get('name', 'Unnamed Folder')
+        for workspace in workspaces:
+            workspace_id = workspace.get('id')
+            workspace_name = workspace.get('name', 'Unknown Workspace')
+            self.comboBox_workspace.addItem(workspace_name, workspace_id)
 
-            self.comboBox_folder.addItem(folder_name, folder_id)
+    def add_folder_item(self, folder_data):
+        """Create a frame for each folder item."""
+        item_frame = QtWidgets.QFrame()
+        item_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        item_frame.setFrameShadow(QtWidgets.QFrame.Raised)
+        item_frame.setMinimumHeight(80)
+
+        # Create layout for the item
+        item_layout = QtWidgets.QHBoxLayout(item_frame)
+
+        # Add folder icon
+        folder_icon_label = QtWidgets.QLabel()
+        folder_icon_label.setFixedSize(64, 64)
+        folder_icon_label.setScaledContents(True)
+
+        # Use a folder icon
+        folder_icon = QIcon(":/plugins/maphub/icon.png")  # Using the plugin icon as a placeholder
+        pixmap = folder_icon.pixmap(QSize(64, 64))
+        folder_icon_label.setPixmap(pixmap)
+
+        item_layout.addWidget(folder_icon_label)
+
+        # Add description section
+        desc_layout = QtWidgets.QVBoxLayout()
+
+        # Folder name
+        name_label = QtWidgets.QLabel(folder_data.get('name', 'Unnamed Folder'))
+        font = name_label.font()
+        font.setBold(True)
+        name_label.setFont(font)
+        desc_layout.addWidget(name_label)
+
+        # Add description layout to main layout
+        item_layout.addLayout(desc_layout)
+
+        # Add spacer
+        item_layout.addItem(QtWidgets.QSpacerItem(
+            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
+
+        # Store folder_id in the frame for later reference
+        item_frame.setProperty("folder_id", folder_data['id'])
+
+        # Make the entire frame clickable
+        item_frame.setCursor(QCursor(Qt.PointingHandCursor))
+        item_frame.mousePressEvent = lambda event: self.on_folder_clicked(folder_data['id'])
+
+        # Add to layout
+        self.list_layout.addWidget(item_frame)
 
     def add_map_item(self, map_data):
         """Create a frame for each list item."""
