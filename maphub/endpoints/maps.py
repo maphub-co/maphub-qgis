@@ -1,3 +1,4 @@
+import json
 import uuid
 import warnings
 from typing import Dict, Any, Optional, List
@@ -7,22 +8,22 @@ from .base import BaseEndpoint
 
 class MapsEndpoint(BaseEndpoint):
     """Endpoints for map operations (single map)."""
-    
+
     def get_map(self, map_id: uuid.UUID) -> Dict[str, Any]:
         """
         Retrieves a map resource based on the provided map ID.
-        
+
         :param map_id: The unique identifier of the map to retrieve.
         :type map_id: uuid.UUID
         :return: The specified map.
         :rtype: Dict[str, Any]
         """
         return self._make_request("GET", f"/maps/{map_id}").json()
-    
+
     def get_thumbnail(self, map_id: uuid.UUID) -> bytes:
         """
         Fetches the thumbnail image for a given map using its unique identifier.
-        
+
         :param map_id: The universally unique identifier (UUID) of the map for
                        which the thumbnail image is to be fetched.
         :type map_id: uuid.UUID
@@ -31,11 +32,11 @@ class MapsEndpoint(BaseEndpoint):
         :rtype: bytes
         """
         return self._make_request("GET", f"/maps/{map_id}/thumbnail").content
-    
+
     def get_tiler_url(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> str:
         """
         Constructs a request to retrieve the tiler URL for a given map.
-        
+
         :param map_id: The UUID of the map for which the tiler URL is being requested.
         :param version_id: An optional UUID specifying the particular version of the
             map to retrieve the tiler URL for.
@@ -43,19 +44,19 @@ class MapsEndpoint(BaseEndpoint):
         :return: A string representing the tiler URL.
         """
         params = {}
-        
+
         if version_id is not None:
             params["version_id"] = version_id
-        
+
         if alias is not None:
             params["alias"] = alias
-        
+
         return self._make_request("GET", f"/maps/{map_id}/tiler_url", params=params).json()
-    
+
     def get_layer_info(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> Dict[str, Any]:
         """
         Constructs a request to retrieve layer information for a given map.
-        
+
         :param map_id: The UUID of the map for which the layer information is being requested.
         :param version_id: An optional UUID specifying the particular version of the
             map to retrieve the layer information for.
@@ -63,20 +64,20 @@ class MapsEndpoint(BaseEndpoint):
         :return: A dictionary containing layer information.
         """
         params = {}
-        
+
         if version_id is not None:
             params["version_id"] = version_id
-        
+
         if alias is not None:
             params["alias"] = alias
-        
+
         return self._make_request("GET", f"/maps/{map_id}/layer_info", params=params).json()
-    
+
     def upload_map(self, map_name: str, folder_id: uuid.UUID = None, public: bool = False,
-                   path: str = None):
+                   path: str = None) -> Dict[str, Any]:
         """
         Uploads a map to the server.
-        
+
         :param map_name: The name of the map to be uploaded.
         :type map_name: str
         :param folder_id: The unique identifier of the folder to which the map belongs.
@@ -89,7 +90,7 @@ class MapsEndpoint(BaseEndpoint):
         """
         if folder_id is None:
             raise ValueError("folder_id must be provided")
-        
+
         params = {
             "folder_id": str(folder_id),
             "map_name": map_name,
@@ -97,14 +98,14 @@ class MapsEndpoint(BaseEndpoint):
             # "colormap": "viridis",
             # "vector_lod": 8,
         }
-        
+
         with open(path, "rb") as f:
-            return self._make_request("POST", f"/maps", params=params, files={"file": f})
-    
+            return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
+
     def download_map(self, map_id: uuid.UUID, path: str):
         """
         Downloads a map from a remote server and saves it to the specified path.
-        
+
         :param map_id: Identifier of the map to download.
         :type map_id: uuid.UUID
         :param path: File system path where the downloaded map will be stored.
@@ -115,6 +116,18 @@ class MapsEndpoint(BaseEndpoint):
         with open(path, "wb") as f:
             f.write(response.content)
 
+    def set_visuals(self, map_id: uuid.UUID, visuals: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Updates the visuals configuration of a specified map by sending a POST request
+        to the corresponding API endpoint with the provided data.
+
+        :param map_id: Unique identifier for the map.
+        :param visuals: Dictionary containing the details of the visuals configuration
+                        to apply to the map.
+        :return: The response obtained from executing the request to the API as returned
+                 by the `_make_request` method.
+        """
+        return self._make_request("PUT", f"/maps/{map_id}/visuals", data=json.dumps(visuals)).json()
 
     ### Maps endpoints
     def get_public_maps(self, sort_by: str = None, page: int = None, page_size: int = None) -> Dict[str, Any]:
