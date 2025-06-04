@@ -857,7 +857,6 @@ class MapHubClient:
         try:
             # For folders, first clone the folder structure
             result_path = self.clone_folder(folder_id, output_dir, output_dir, None)
-            print("2. ", result_path)
 
             # Then create .maphub directory inside the cloned folder
             maphub_dir = result_path / ".maphub"
