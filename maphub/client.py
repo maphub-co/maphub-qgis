@@ -13,6 +13,7 @@ from .endpoints.folder import FolderEndpoint
 from .endpoints.project import ProjectEndpoint
 from .endpoints.maps import MapsEndpoint
 from .endpoints.versions import VersionEndpoint
+from .exceptions import APIException
 
 
 class MapHubClient:
@@ -430,18 +431,18 @@ class MapHubClient:
             File path for the map
         """
         # Get the map name and type
-        map_name = map_data.get("map", {}).get("name", "unnamed")
-        map_type = map_data.get("map", {}).get("type", "unknown")
+        map_name = map_data.get("name", "unnamed")
+        map_type = map_data.get("type", "unknown")
 
         # Sanitize the map name for use as a filename
         map_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in map_name)
 
         # Determine the file extension based on the map type
         extension = ".gpkg"  # Default to GeoPackage
-        if map_type == "geojson":
-            extension = ".geojson"
-        elif map_type == "shapefile":
-            extension = ".zip"  # Shapefiles are typically zipped
+        if map_type == "raster":
+            extension = ".tif"
+        elif map_type == "vector":
+            extension = ".fgb"  # Shapefiles are typically zipped
 
         # Create the file path
         file_path = str(save_dir / f"{map_name}{extension}")
@@ -462,12 +463,12 @@ class MapHubClient:
         # Create metadata
         metadata = {
             "id": str(map_id),
-            "name": map_data.get("map", {}).get("name", "unnamed"),
-            "type": map_data.get("map", {}).get("type", "unknown"),
-            "version_id": map_data.get("map", {}).get("latest_version_id"),
+            "name": map_data.get("name", "unnamed"),
+            "type": map_data.get("type", "unknown"),
+            "version_id": map_data["latest_version_id"],
             "checksum": self._calculate_checksum(file_path),
             "path": str(Path(file_path).relative_to(output_dir)),
-            "last_modified": map_data.get("map", {}).get("updated_time")
+            "last_modified": map_data.get("updated_at")
         }
 
         # Save metadata
@@ -539,6 +540,22 @@ class MapHubClient:
         parent_id = folder_info.get("folder", {}).get("parent_folder_id")
         self._save_folder_metadata(folder_id, folder_name, parent_id, map_ids, subfolder_ids, maphub_dir)
 
+    def _init_dot_maphub_dir(self, folder_id: uuid.UUID, path: Path) -> Path:
+        # Then create .maphub directory inside the cloned folder
+        maphub_dir = path / ".maphub"
+        maphub_dir.mkdir(exist_ok=True)
+        (maphub_dir / "maps").mkdir(exist_ok=True)
+        (maphub_dir / "folders").mkdir(exist_ok=True)
+
+        # Save config
+        with open(maphub_dir / "config.json", "w") as f:
+            json.dump({
+                "remote_id": str(folder_id),
+                "last_sync": datetime.now().isoformat()
+            }, f, indent=2)
+
+        return maphub_dir
+
     # Main methods for clone, pull, and push operations
     def clone_map(self, map_id: uuid.UUID, output_dir: Path, maphub_dir: Path) -> None:
         """
@@ -550,8 +567,8 @@ class MapHubClient:
             maphub_dir: Path to the .maphub directory
         """
         try:
-            map_data = self.maps.get_map(map_id)
-            print(f"Cloning map: {map_data.get('map', {}).get('name', 'Unnamed Map')}")
+            map_data = self.maps.get_map(map_id)['map']
+            print(f"Cloning map: {map_data.get('name', 'Unnamed Map')}")
 
             # Get the file path for the map
             file_path = self._get_file_path_for_map(map_data, output_dir)
@@ -579,38 +596,39 @@ class MapHubClient:
         """
         try:
             # Get the latest map info
-            map_data = self.maps.get_map(map_id)
+            map_data = self.maps.get_map(map_id)['map']
 
             # Check if the version has changed
-            if map_data.get('map', {})["latest_version_id"] != map_metadata["version_id"]:
-                print(f"Pulling updates for map: {map_data.get('map', {}).get('name', 'Unnamed Map')}")
+            if map_data["latest_version_id"] != map_metadata["version_id"]:
+                print(f"Pulling updates for map: {map_data.get('name', 'Unnamed Map')}")
 
                 # Get the current map path
                 map_path = root_dir / map_metadata["path"]
 
                 # Get the new file path for the map
-                file_path = self._get_file_path_for_map(map_data.get('map'), map_path.parent)
+                file_path = self._get_file_path_for_map(map_data, map_path.parent)
 
                 # Download the map
                 self.maps.download_map(map_id, file_path)
 
                 # Update metadata
-                map_metadata["version_id"] = map_data.get('map', {})["latest_version_id"]
-                map_metadata["checksum"] = map_data.get("meta_data", {}).get("checksum", self._calculate_checksum(file_path))
-                map_metadata["last_modified"] = map_data.get("map", {}).get("updated_time")
+                map_metadata["version_id"] = map_data["latest_version_id"]
+                map_metadata["checksum"] = map_data.get("checksum", self._calculate_checksum(file_path))
+                map_metadata["last_modified"] = map_data.get("updated_at")
                 map_metadata["path"] = str(Path(file_path).relative_to(root_dir))
-                map_metadata["type"] = map_data.get("map", {}).get("type", "unknown")
+                map_metadata["type"] = map_data.get("type", "unknown")
 
                 with open(maphub_dir / "maps" / f"{map_id}.json", "w") as f:
                     json.dump(map_metadata, f, indent=2)
 
-                print(f"Successfully updated map: {map_data.get('map', {}).get('name', 'Unnamed Map')}")
+                print(f"Successfully updated map: {map_data.get('name', 'Unnamed Map')}")
             else:
-                print(f"Map is already up to date: {map_data.get('map', {}).get('name', 'Unnamed Map')}")
+                print(f"Map is already up to date: {map_data.get('name', 'Unnamed Map')}")
         except Exception as e:
             print(f"Error pulling map {map_id}: {e}")
 
-    def push_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path, version_description: Optional[str] = None) -> None:
+    def push_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path,
+                 version_description: Optional[str] = None) -> None:
         """
         Push updates for a single map to MapHub.
 
@@ -660,7 +678,8 @@ class MapHubClient:
         except Exception as e:
             print(f"Error pushing map {map_id}: {e}")
 
-    def clone_folder(self, folder_id: uuid.UUID, local_path: Path, output_dir: Path, maphub_dir: Optional[Path] = None) -> Path:
+    def clone_folder(self, folder_id: uuid.UUID, local_path: Path, output_dir: Path,
+                     maphub_dir: Optional[Path] = None) -> Path:
         """
         Recursively clone a folder and its contents from MapHub.
 
@@ -673,58 +692,46 @@ class MapHubClient:
         Returns:
             Path to the cloned folder
         """
-        try:
-            folder_info = self.folder.get_folder(folder_id)
-            folder_name = folder_info.get("folder", {}).get("name", "root")
+        folder_info = self.folder.get_folder(folder_id)
+        folder_name = folder_info.get("folder", {}).get("name", "root")
 
-            print(f"Cloning folder: {folder_name}")
+        print(f"Cloning folder: {folder_name}")
 
-            # Create local folder
-            folder_path = local_path / folder_name
-            folder_path.mkdir(exist_ok=True)
+        # Create local folder
+        folder_path = local_path / folder_name
+        folder_path.mkdir(exist_ok=True)
+        if maphub_dir is None:
+            maphub_dir = self._init_dot_maphub_dir(folder_id, folder_path)
 
-            # Track maps and subfolders
-            map_ids = []
-            subfolder_ids = []
+        # Track maps and subfolders
+        map_ids = []
+        subfolder_ids = []
 
-            # Clone maps in this folder
-            maps = folder_info["map_infos"]
-            for map_data in maps:
+        # Clone maps in this folder
+        maps = folder_info["map_infos"]
+        for map_data in maps:
+            try:
                 map_id = uuid.UUID(map_data["id"])
-
-                print(f"  Cloning map: {map_data.get('map', {}).get('name', 'Unnamed Map')}")
-
-                # Get the file path for the map
-                file_path = self._get_file_path_for_map(map_data, folder_path)
-
-                # Download the map
-                self.maps.download_map(map_id, file_path)
-
-                # Save map metadata if maphub_dir is provided
-                if maphub_dir is not None:
-                    self._save_map_metadata(map_data, map_id, file_path, output_dir, maphub_dir)
-
+                self.clone_map(map_id, folder_path, maphub_dir)
                 map_ids.append(str(map_id))
+            except APIException as e:
+                print(f"Skipping {map_data.get('id')}, Error: {e.status_code}, {e.message}")
+                continue
 
-            # Recursively clone subfolders
-            subfolders = folder_info["child_folders"]
+        # Recursively clone subfolders
+        subfolders = folder_info["child_folders"]
 
-            for subfolder in subfolders:
-                subfolder_id = uuid.UUID(subfolder["id"])
-                subfolder_ids.append(str(subfolder_id))
-                self.clone_folder(subfolder_id, folder_path, output_dir, maphub_dir)
+        for subfolder in subfolders:
+            subfolder_id = uuid.UUID(subfolder["id"])
+            subfolder_ids.append(str(subfolder_id))
+            self.clone_folder(subfolder_id, folder_path, output_dir, maphub_dir)
 
-            # Save folder metadata if maphub_dir is provided
-            if maphub_dir is not None:
-                parent_id = folder_info.get("folder", {}).get("parent_folder_id")
-                self._save_folder_metadata(folder_id, folder_name, parent_id, map_ids, subfolder_ids, maphub_dir)
+        # Save folder metadata if maphub_dir is provided
+        parent_id = folder_info.get("folder", {}).get("parent_folder_id")
+        self._save_folder_metadata(folder_id, folder_name, parent_id, map_ids, subfolder_ids, maphub_dir)
 
-            return folder_path
-        except Exception as e:
-            print(f"Error cloning folder {folder_id}: {e}")
-            import traceback
-            traceback.print_exc()
-            return local_path
+        return folder_path
+
 
     def pull_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path) -> None:
         """
@@ -759,15 +766,18 @@ class MapHubClient:
                         map_metadata = json.load(f)
                     self.pull_map(map_id, map_metadata, root_dir, maphub_dir)
                 else:
-                    # New map, clone it
-                    print(f"  New map found: {map_data.get('map', {}).get('name', 'Unnamed Map')}")
-                    file_path = self._get_file_path_for_map(map_data, local_path)
-                    self.maps.download_map(map_id, file_path)
-                    self._save_map_metadata(map_data, map_id, file_path, root_dir, maphub_dir)
+                    try:
+                        # New map, clone it
+                        print(f"  New map found: {map_data.get('name', 'Unnamed Map')}")
+                        map_id = uuid.UUID(map_data["id"])
+                        self.clone_map(map_id, local_path, maphub_dir)
 
-                    # Add to folder metadata
-                    if str(map_id) not in folder_metadata["maps"]:
-                        folder_metadata["maps"].append(str(map_id))
+                        # Add to folder metadata
+                        if str(map_id) not in folder_metadata["maps"]:
+                            folder_metadata["maps"].append(str(map_id))
+                    except APIException as e:
+                        print(f"Skipping {map_data.get('id')}, Error: {e.status_code}, {e.message}")
+                        continue
 
             # Pull subfolders
             subfolders = folder_info["child_folders"]
@@ -799,7 +809,8 @@ class MapHubClient:
             import traceback
             traceback.print_exc()
 
-    def push_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path, version_description: Optional[str] = None) -> None:
+    def push_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path,
+                    version_description: Optional[str] = None) -> None:
         """
         Recursively push updates for a folder and its contents to MapHub.
 
@@ -857,51 +868,6 @@ class MapHubClient:
         try:
             # For folders, first clone the folder structure
             result_path = self.clone_folder(folder_id, output_dir, output_dir, None)
-
-            # Then create .maphub directory inside the cloned folder
-            maphub_dir = result_path / ".maphub"
-            maphub_dir.mkdir(exist_ok=True)
-            (maphub_dir / "maps").mkdir(exist_ok=True)
-            (maphub_dir / "folders").mkdir(exist_ok=True)
-
-            # Save config
-            with open(maphub_dir / "config.json", "w") as f:
-                json.dump({
-                    "remote_id": str(folder_id),
-                    "last_sync": datetime.now().isoformat()
-                }, f, indent=2)
-
-            # Now save metadata for the folder and its contents
-            folder_info = self.folder.get_folder(folder_id)
-            folder_name = folder_info.get("folder", {}).get("name", "root")
-
-            # Get maps and subfolders
-            map_ids = []
-            subfolder_ids = []
-
-            # Process maps
-            maps = folder_info["map_infos"]
-            for map_data in maps:
-                map_id = uuid.UUID(map_data["id"])
-                map_ids.append(str(map_id))
-
-                # Save map metadata
-                file_path = self._get_file_path_for_map(map_data, result_path)
-                self._save_map_metadata(map_data, map_id, file_path, result_path, maphub_dir)
-
-            # Process subfolders
-            subfolders = folder_info["child_folders"]
-
-            for subfolder in subfolders:
-                subfolder_id = uuid.UUID(subfolder["id"])
-                subfolder_ids.append(str(subfolder_id))
-
-                # Save subfolder metadata recursively
-                self._save_folder_metadata_recursive(subfolder_id, result_path, maphub_dir)
-
-            # Save folder metadata
-            parent_id = folder_info.get("folder", {}).get("parent_folder_id")
-            self._save_folder_metadata(folder_id, folder_name, parent_id, map_ids, subfolder_ids, maphub_dir)
 
             print(f"Successfully cloned folder structure to {result_path}")
             return result_path

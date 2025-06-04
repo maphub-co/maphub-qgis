@@ -1,4 +1,5 @@
 import requests
+from requests.exceptions import HTTPError
 from typing import Optional
 from ..exceptions import APIException
 
@@ -45,7 +46,10 @@ class BaseEndpoint:
         )
         try:
             response.raise_for_status()
-        except:
-            raise APIException(response.status_code, response.json()['detail'])
+        except HTTPError:
+            try:
+                raise APIException(response.status_code, response.json()['detail'])
+            except:
+                raise APIException(response.status_code, "API request error.")
 
         return response
