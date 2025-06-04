@@ -24,6 +24,7 @@ from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
 from ..utils import get_maphub_client, handled_exceptions, apply_style_to_layer
+from .CloneFolderDialog import CloneFolderDialog
 
 
 class ThumbnailLoader(QThread):
@@ -360,9 +361,9 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Add buttons for bulk operations
         button_layout = QtWidgets.QVBoxLayout()
 
-        # Button 1 - Download All Maps
-        btn_download_all = QtWidgets.QPushButton("Download All")
-        btn_download_all.setToolTip("Download all maps in this folder")
+        # Button 1 - Clone Folder
+        btn_download_all = QtWidgets.QPushButton("Clone Folder")
+        btn_download_all.setToolTip("Clone this folder to your local machine")
         btn_download_all.clicked.connect(lambda: self.on_download_all_clicked(folder_data['id']))
         button_layout.addWidget(btn_download_all)
 
@@ -574,95 +575,26 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
     @handled_exceptions
     def on_download_all_clicked(self, folder_id):
-        """Download all maps in a folder"""
-        print(f"Downloading all maps in folder: {folder_id}")
+        """Clone a folder from MapHub"""
+        print(f"Cloning folder: {folder_id}")
 
-        # Get all maps in the folder
-        maps = get_maphub_client().folder.get_folder_maps(folder_id)
+        # Create the clone dialog
+        clone_dialog = CloneFolderDialog(self)
 
-        if not maps:
-            QMessageBox.information(
-                self,
-                "No Maps Found",
-                "There are no maps in this folder to download."
-            )
-            return
+        # Set the folder ID to clone
+        clone_dialog.set_folder_id(folder_id)
 
-        # Ask user for directory to save maps
-        save_dir = QFileDialog.getExistingDirectory(
-            self,
-            "Select Directory to Save Maps",
-            ""
-        )
+        # Connect to the cloneCompleted signal
+        clone_dialog.cloneCompleted.connect(self.on_clone_completed)
 
-        # If user cancels the dialog, return early
-        if not save_dir:
-            return
+        # Show the dialog
+        clone_dialog.exec_()
 
-        # Create progress dialog
-        progress = QProgressBar()
-        progress.setMinimum(0)
-        progress.setMaximum(len(maps))
-        progress.setValue(0)
-
-        progress_dialog = QDialog(self)
-        progress_dialog.setWindowTitle("Downloading Maps")
-        progress_dialog.setMinimumWidth(300)
-
-        layout = QVBoxLayout(progress_dialog)
-        layout.addWidget(QLabel("Downloading maps..."))
-        layout.addWidget(progress)
-
-        progress_dialog.show()
-
-        # Download each map
-        success_count = 0
-        for i, map_data in enumerate(maps):
-            try:
-                # Create filename based on map name and type
-                file_name = f"{map_data.get('name', f'map_{map_data.get('id')}')}"
-                if map_data.get('type') == 'raster':
-                    file_name += ".tif"
-                    file_path = os.path.join(save_dir, file_name)
-                elif map_data.get('type') == 'vector':
-                    file_name += ".fgb"
-                    file_path = os.path.join(save_dir, file_name)
-                else:
-                    # Skip unknown types
-                    continue
-
-                # Download the map
-                get_maphub_client().maps.download_map(map_data['id'], file_path)
-
-                # Add to QGIS layers
-                if os.path.exists(file_path):
-                    if map_data.get('type') == 'raster':
-                        layer = self.iface.addRasterLayer(file_path, map_data.get('name', os.path.basename(file_path)))
-                    elif map_data.get('type') == 'vector':
-                        layer = self.iface.addVectorLayer(file_path, map_data.get('name', os.path.basename(file_path)), "ogr")
-
-                    if layer and layer.isValid():
-                        # Apply style if available
-                        if 'visuals' in map_data and map_data['visuals']:
-                            apply_style_to_layer(layer, map_data['visuals'])
-                        success_count += 1
-
-                # Update progress
-                progress.setValue(i + 1)
-                QtWidgets.QApplication.processEvents()
-
-            except Exception as e:
-                print(f"Error downloading map {map_data.get('id')}: {e}")
-
-        # Close progress dialog
-        progress_dialog.close()
-
-        # Show completion message
-        QMessageBox.information(
-            self,
-            "Download Complete",
-            f"Successfully downloaded {success_count} out of {len(maps)} maps to {save_dir}."
-        )
+    def on_clone_completed(self, project_path):
+        """Handle completion of cloning process"""
+        # Load the QGIS project
+        if project_path:
+            self.iface.addProject(project_path)
 
     @handled_exceptions
     def on_tiling_all_clicked(self, folder_id):
