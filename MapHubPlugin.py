@@ -16,6 +16,8 @@ from .ui.CreateFolderDialog import CreateFolderDialog
 from .utils import handled_exceptions, show_error_dialog
 from .ui.ApiKeyDialog import ApiKeyDialog
 from .ui.UploadMapDialog import UploadMapDialog
+from .ui.PullProjectDialog import PullProjectDialog
+from .ui.PushProjectDialog import PushProjectDialog
 
 # MapHub package imports
 from .maphub.client import MapHubClient
@@ -182,6 +184,20 @@ class MapHubPlugin:
             add_to_toolbar=False
         )
 
+        self.add_action(
+            icon_path,
+            text=self.tr(u'Pull Project from MapHub'),
+            callback=self.pull_project,
+            parent=self.iface.mainWindow()
+        )
+
+        self.add_action(
+            icon_path,
+            text=self.tr(u'Push Project to MapHub'),
+            callback=self.push_project,
+            parent=self.iface.mainWindow()
+        )
+
         # will be set False in run()
         self.first_start = True
 
@@ -234,4 +250,16 @@ class MapHubPlugin:
     def upload_map(self, checked=False):
         """Show upload map dialog to upload a map."""
         dlg = UploadMapDialog(self.iface, self.iface.mainWindow())
+        result = dlg.exec_()
+
+    @handled_exceptions
+    def pull_project(self, checked=False):
+        """Show pull project dialog to update the current project with latest data from MapHub."""
+        dlg = PullProjectDialog(self.iface, self.iface.mainWindow())
+        result = dlg.exec_()
+
+    @handled_exceptions
+    def push_project(self, checked=False):
+        """Show push project dialog to push the current project data to MapHub."""
+        dlg = PushProjectDialog(self.iface, self.iface.mainWindow())
         result = dlg.exec_()

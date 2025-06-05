@@ -161,8 +161,11 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
             )
 
     def load_and_save_styles(self, folder_path):
-        """Load styling information from MapHub and save it as .qml files"""
+        """Load styling information from MapHub and store it in memory"""
         print(f"Loading styling information for maps in {folder_path}")
+
+        # Dictionary to store styles for each file path
+        self.file_styles = {}
 
         # Find all GIS files in the folder
         for root, dirs, files in os.walk(folder_path):
@@ -197,20 +200,9 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
                             if 'map' in map_data and 'visuals' in map_data['map'] and map_data['map']['visuals']:
                                 print(f"Found styling for {file_path.name}")
 
-                                # Create a temporary layer to apply the style
-                                if file.endswith(('.shp', '.gpkg', '.geojson', '.kml', '.fgb')):
-                                    temp_layer = QgsVectorLayer(str(file_path), file_path.stem, "ogr")
-                                else:
-                                    temp_layer = QgsRasterLayer(str(file_path), file_path.stem)
-
-                                if temp_layer.isValid():
-                                    # Apply the style to the layer
-                                    apply_style_to_layer(temp_layer, map_data['map']['visuals'])
-
-                                    # Save the style to a .qml file
-                                    style_path = file_path.with_suffix('.qml')
-                                    temp_layer.saveNamedStyle(str(style_path))
-                                    print(f"Saved style to {style_path}")
+                                # Store the style in memory
+                                self.file_styles[str(file_path)] = map_data['map']['visuals']
+                                print(f"Stored style for {file_path.name} in memory")
                     except Exception as e:
                         print(f"Error processing style for {file_path}: {e}")
 
@@ -239,10 +231,10 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
                 if file.endswith(('.shp', '.gpkg', '.geojson', '.kml', '.fgb')):
                     layer = QgsVectorLayer(str(file_path), file_path.stem, "ogr")
                     if layer.isValid():
-                        # Check if there's a QGIS style file
-                        style_path = file_path.with_suffix('.qml')
-                        if style_path.exists():
-                            layer.loadNamedStyle(str(style_path))
+                        # Apply style directly from memory if available
+                        if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
+                            apply_style_to_layer(layer, self.file_styles[str(file_path)])
+                            print(f"Applied style to layer {layer.name()} directly from memory")
 
                         project.addMapLayer(layer)
 
@@ -250,10 +242,10 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
                 elif file.endswith(('.tif', '.tiff', '.jpg', '.png')):
                     layer = QgsRasterLayer(str(file_path), file_path.stem)
                     if layer.isValid():
-                        # Check if there's a QGIS style file
-                        style_path = file_path.with_suffix('.qml')
-                        if style_path.exists():
-                            layer.loadNamedStyle(str(style_path))
+                        # Apply style directly from memory if available
+                        if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
+                            apply_style_to_layer(layer, self.file_styles[str(file_path)])
+                            print(f"Applied style to layer {layer.name()} directly from memory")
 
                         project.addMapLayer(layer)
 
