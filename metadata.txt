@@ -5,15 +5,15 @@
 [general]
 name=MapHub
 qgisMinimumVersion=3.0
-description=QGIS plugin for uploading, sharing, and managing geospatial data with the MapHub platform
+description=QGIS plugin for uploading, sharing, and managing geospatial data with the MapHub.co platform
 version=0.6
 author=MapHub
 email=maphub@meteory.eu
 
-about=MapHub is a community hub for GIS users to host, visualize, and share geospatial datasets. This plugin enables seamless integration between QGIS and MapHub, allowing users to upload maps to MapHub projects, share them publicly or privately, and browse projects and download maps directly within QGIS.
+about=MapHub.co is a community hub for GIS users to host, visualize, and share geospatial datasets. This plugin enables seamless integration between QGIS and MapHub.co, allowing users to upload maps to MapHub.co projects, share them publicly or privately, and browse projects and download maps directly within QGIS.
 
-tracker=https://github.com/meteory-org/maphub-qgis
-repository=https://github.com/meteory-org/maphub-qgis
+tracker=https://github.com/maphub-co/maphub-qgis
+repository=https://github.com/maphub-co/maphub-qgis
 # End of mandatory metadata
 
 # Recommended items:
@@ -25,7 +25,7 @@ hasProcessingProvider=no
 # Tags are comma separated with spaces allowed
 tags=python
 
-homepage=https://maphub.co
+homepage=https://www.maphub.co
 category=Plugins
 icon=icon.png
 # experimental flag
