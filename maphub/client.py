@@ -838,6 +838,68 @@ class MapHubClient:
                         map_metadata = json.load(f)
                     self.push_map(uuid.UUID(map_id), map_metadata, root_dir, maphub_dir, version_description)
 
+            # Check for new GIS files in the folder
+            gis_extensions = ['.gpkg', '.tif', '.fgb', '.shp', '.geojson']
+            tracked_files = []
+
+            # Get all tracked files from map metadata
+            for map_id in folder_metadata["maps"]:
+                map_file = maphub_dir / "maps" / f"{map_id}.json"
+                if map_file.exists():
+                    with open(map_file, "r") as f:
+                        map_metadata = json.load(f)
+                    tracked_files.append(root_dir / map_metadata["path"])
+
+            # Find new GIS files
+            for file_path in local_path.glob('*'):
+                if file_path.is_file() and file_path.suffix.lower() in gis_extensions:
+                    # Check if this file is already tracked
+                    if file_path not in tracked_files:
+                        print(f"Found new GIS file: {file_path}")
+
+                        # Upload the new map
+                        try:
+                            map_name = file_path.stem
+                            response = self.maps.upload_map(
+                                map_name=map_name,
+                                folder_id=folder_id,
+                                public=False,
+                                path=str(file_path)
+                            )
+
+                            # Get the map ID from the response
+                            map_id = response.get("map_id")
+                            if map_id:
+                                print(f"Successfully uploaded new map: {map_name} with ID: {map_id}")
+
+                                # Add the map to the folder metadata
+                                folder_metadata["maps"].append(map_id)
+
+                                # Save map metadata
+                                map_data = {
+                                    "id": map_id,
+                                    "name": map_name,
+                                    "type": "unknown",  # Could be determined based on file extension
+                                    "version_id": response.get("id"),  # Version ID from response
+                                    "latest_version_id": response.get("id"),
+                                    "updated_at": response.get("created_time")  # Use created_time as updated_at
+                                }
+
+                                # Save the map metadata
+                                self._save_map_metadata(
+                                    map_data=map_data,
+                                    map_id=uuid.UUID(map_id),
+                                    file_path=str(file_path),
+                                    output_dir=root_dir,
+                                    maphub_dir=maphub_dir
+                                )
+                        except Exception as e:
+                            print(f"Error uploading new map {file_path}: {e}")
+
+            # Save updated folder metadata
+            with open(maphub_dir / "folders" / f"{folder_id}.json", "w") as f:
+                json.dump(folder_metadata, f, indent=2)
+
             # Push subfolders
             for subfolder_id in folder_metadata["subfolders"]:
                 # Load subfolder metadata

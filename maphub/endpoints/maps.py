@@ -1,6 +1,10 @@
 import json
+import os
 import uuid
 import warnings
+import zipfile
+import tempfile
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from .base import BaseEndpoint
@@ -8,22 +12,22 @@ from .base import BaseEndpoint
 
 class MapsEndpoint(BaseEndpoint):
     """Endpoints for map operations (single map)."""
-    
+
     def get_map(self, map_id: uuid.UUID) -> Dict[str, Any]:
         """
         Retrieves a map resource based on the provided map ID.
-        
+
         :param map_id: The unique identifier of the map to retrieve.
         :type map_id: uuid.UUID
         :return: The specified map.
         :rtype: Dict[str, Any]
         """
         return self._make_request("GET", f"/maps/{map_id}").json()
-    
+
     def get_thumbnail(self, map_id: uuid.UUID) -> bytes:
         """
         Fetches the thumbnail image for a given map using its unique identifier.
-        
+
         :param map_id: The universally unique identifier (UUID) of the map for
                        which the thumbnail image is to be fetched.
         :type map_id: uuid.UUID
@@ -32,11 +36,11 @@ class MapsEndpoint(BaseEndpoint):
         :rtype: bytes
         """
         return self._make_request("GET", f"/maps/{map_id}/thumbnail").content
-    
+
     def get_tiler_url(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> str:
         """
         Constructs a request to retrieve the tiler URL for a given map.
-        
+
         :param map_id: The UUID of the map for which the tiler URL is being requested.
         :param version_id: An optional UUID specifying the particular version of the
             map to retrieve the tiler URL for.
@@ -44,19 +48,19 @@ class MapsEndpoint(BaseEndpoint):
         :return: A string representing the tiler URL.
         """
         params = {}
-        
+
         if version_id is not None:
             params["version_id"] = version_id
-        
+
         if alias is not None:
             params["alias"] = alias
-        
+
         return self._make_request("GET", f"/maps/{map_id}/tiler_url", params=params).json()
-    
+
     def get_layer_info(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> Dict[str, Any]:
         """
         Constructs a request to retrieve layer information for a given map.
-        
+
         :param map_id: The UUID of the map for which the layer information is being requested.
         :param version_id: An optional UUID specifying the particular version of the
             map to retrieve the layer information for.
@@ -64,20 +68,23 @@ class MapsEndpoint(BaseEndpoint):
         :return: A dictionary containing layer information.
         """
         params = {}
-        
+
         if version_id is not None:
             params["version_id"] = version_id
-        
+
         if alias is not None:
             params["alias"] = alias
-        
+
         return self._make_request("GET", f"/maps/{map_id}/layer_info", params=params).json()
-    
+
     def upload_map(self, map_name: str, folder_id: uuid.UUID = None, public: bool = False,
                    path: str = None) -> Dict[str, Any]:
         """
         Uploads a map to the server.
-        
+
+        If the path points to a .shp file, all related files (with the same base name but different
+        extensions like .dbf, .shx, .prj, etc.) will be zipped together and the zip file will be uploaded.
+
         :param map_name: The name of the map to be uploaded.
         :type map_name: str
         :param folder_id: The unique identifier of the folder to which the map belongs.
@@ -90,7 +97,7 @@ class MapsEndpoint(BaseEndpoint):
         """
         if folder_id is None:
             raise ValueError("folder_id must be provided")
-        
+
         params = {
             "folder_id": str(folder_id),
             "map_name": map_name,
@@ -98,14 +105,42 @@ class MapsEndpoint(BaseEndpoint):
             # "colormap": "viridis",
             # "vector_lod": 8,
         }
-        
-        with open(path, "rb") as f:
-            return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
-    
+
+        # Check if the file is a shapefile (.shp)
+        if path.lower().endswith('.shp'):
+            # Create a temporary zip file
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip_file:
+                temp_zip_path = temp_zip_file.name
+
+            try:
+                # Get the directory and base name of the shapefile
+                shapefile_path = Path(path)
+                shapefile_dir = shapefile_path.parent
+                shapefile_base = shapefile_path.stem
+
+                # Create a zip file containing all related files
+                with zipfile.ZipFile(temp_zip_path, 'w') as zipf:
+                    # Find all files with the same base name in the directory
+                    for file in shapefile_dir.glob(f"{shapefile_base}.*"):
+                        # Add the file to the zip with just the filename (no directory path)
+                        zipf.write(file, file.name)
+
+                # Upload the zip file
+                with open(temp_zip_path, "rb") as f:
+                    return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
+            finally:
+                # Clean up the temporary zip file
+                if os.path.exists(temp_zip_path):
+                    os.unlink(temp_zip_path)
+        else:
+            # For non-shapefile uploads, use the original method
+            with open(path, "rb") as f:
+                return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
+
     def download_map(self, map_id: uuid.UUID, path: str):
         """
         Downloads a map from a remote server and saves it to the specified path.
-        
+
         :param map_id: Identifier of the map to download.
         :type map_id: uuid.UUID
         :param path: File system path where the downloaded map will be stored.
