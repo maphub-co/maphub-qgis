@@ -24,7 +24,6 @@ from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
 from ..utils import get_maphub_client, handled_exceptions, apply_style_to_layer
-from .CloneFolderDialog import CloneFolderDialog
 
 
 class ThumbnailLoader(QThread):
@@ -361,13 +360,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Add buttons for bulk operations
         button_layout = QtWidgets.QVBoxLayout()
 
-        # Button 1 - Clone Folder
-        btn_download_all = QtWidgets.QPushButton("Clone Folder")
-        btn_download_all.setToolTip("Clone this folder to your local machine")
-        btn_download_all.clicked.connect(lambda: self.on_download_all_clicked(folder_data['id']))
-        button_layout.addWidget(btn_download_all)
-
-        # Button 2 - Add All as Tiling Service
+        # Add All as Tiling Service
         btn_tiling_all = QtWidgets.QPushButton("Tiling All")
         btn_tiling_all.setToolTip("Add all maps in this folder as tiling services")
         btn_tiling_all.clicked.connect(lambda: self.on_tiling_all_clicked(folder_data['id']))
@@ -573,28 +566,6 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         else:
             raise Exception(f"Unknown layer type: {map_data['type']}")
 
-    @handled_exceptions
-    def on_download_all_clicked(self, folder_id):
-        """Clone a folder from MapHub"""
-        print(f"Cloning folder: {folder_id}")
-
-        # Create the clone dialog
-        clone_dialog = CloneFolderDialog(self.iface, self)
-
-        # Set the folder ID to clone
-        clone_dialog.on_folder_selected(folder_id)
-
-        # Connect to the cloneCompleted signal
-        clone_dialog.cloneCompleted.connect(self.on_clone_completed)
-
-        # Show the dialog
-        clone_dialog.exec_()
-
-    def on_clone_completed(self, project_path):
-        """Handle completion of cloning process"""
-        # Load the QGIS project
-        if project_path:
-            self.iface.addProject(project_path)
 
     @handled_exceptions
     def on_tiling_all_clicked(self, folder_id):

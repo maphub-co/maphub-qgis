@@ -11,6 +11,7 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
+from .ui.CloneFolderDialog import CloneFolderDialog
 from .ui.GetMapDialog import GetMapDialog
 from .ui.CreateFolderDialog import CreateFolderDialog
 from .utils import handled_exceptions, show_error_dialog
@@ -18,9 +19,6 @@ from .ui.ApiKeyDialog import ApiKeyDialog
 from .ui.UploadMapDialog import UploadMapDialog
 from .ui.PullProjectDialog import PullProjectDialog
 from .ui.PushProjectDialog import PushProjectDialog
-
-# MapHub package imports
-from .maphub.client import MapHubClient
 
 
 
@@ -152,7 +150,8 @@ class MapHubPlugin:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/MapHub/icon.png'
+        icon_path = ':/plugins/maphub/icon.png'
+        icon_path = os.path.join(self.plugin_dir, 'icon.png')
         self.add_action(
             icon_path,
             text=self.tr(u'Get Map from MapHub'),
@@ -166,6 +165,7 @@ class MapHubPlugin:
             text=self.tr(u'Upload to MapHub'),
             callback=self.upload_map,
             parent=self.iface.mainWindow(),
+            add_to_toolbar=False
         )
 
         self.add_action(
@@ -185,17 +185,27 @@ class MapHubPlugin:
         )
 
         self.add_action(
-            icon_path,
-            text=self.tr(u'Pull Project from MapHub'),
-            callback=self.pull_project,
-            parent=self.iface.mainWindow()
+            os.path.join(self.plugin_dir, 'clone.png'),
+            text=self.tr(u'Clone Project From MapHub'),
+            callback=self.clone_project,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=True
         )
 
         self.add_action(
-            icon_path,
+            os.path.join(self.plugin_dir, 'pull.png'),
+            text=self.tr(u'Pull Project from MapHub'),
+            callback=self.pull_project,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=True
+        )
+
+        self.add_action(
+            os.path.join(self.plugin_dir, 'push.png'),
             text=self.tr(u'Push Project to MapHub'),
             callback=self.push_project,
-            parent=self.iface.mainWindow()
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=True
         )
 
         # will be set False in run()
@@ -262,4 +272,17 @@ class MapHubPlugin:
     def push_project(self, checked=False):
         """Show push project dialog to push the current project data to MapHub."""
         dlg = PushProjectDialog(self.iface, self.iface.mainWindow())
+        result = dlg.exec_()
+
+    @handled_exceptions
+    def clone_project(self, checked=False):
+        """Show the clone project dialog to clone a directory from MapHub."""
+        dlg = CloneFolderDialog(self.iface, self.iface.mainWindow())
+
+        def on_clone_completed(project_path):
+            if project_path:
+                self.iface.addProject(project_path)
+
+        dlg.cloneCompleted.connect(on_clone_completed)
+
         result = dlg.exec_()
