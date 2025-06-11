@@ -438,11 +438,11 @@ class MapHubClient:
         map_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in map_name)
 
         # Determine the file extension based on the map type
-        extension = ".gpkg"  # Default to GeoPackage
+        extension = ".fgb"  # Default to FlatGeoBuf
         if map_type == "raster":
             extension = ".tif"
         elif map_type == "vector":
-            extension = ".fgb"  # Shapefiles are typically zipped
+            extension = ".fgb"  # FlatGeoBuf format
 
         # Create the file path
         file_path = str(save_dir / f"{map_name}{extension}")

@@ -24,7 +24,7 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
     # Define signals
     cloneCompleted = pyqtSignal(str)  # Signal emitted when cloning is complete, passes project path
 
-    def __init__(self, parent=None, iface=None):
+    def __init__(self, iface, parent=None):
         """Constructor."""
         super(CloneFolderDialog, self).__init__(parent)
         self.setupUi(self)
@@ -241,13 +241,9 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
 
     def on_folder_selected(self, folder_id):
         """Handle selection of a folder for cloning"""
-        self.selected_folder_id = folder_id
-
         # Refresh the display to show the selected folder
-        # self.load_folder_contents(self.folder_history[-1])
-
-    def set_folder_id(self, folder_id):
-        """Set the folder ID to clone (for backward compatibility)"""
+        self.selected_folder_id = folder_id
+        self.load_folder_contents(self.folder_history[-1])
         self.selected_folder_id = folder_id
 
     def on_create_folder_clicked(self):

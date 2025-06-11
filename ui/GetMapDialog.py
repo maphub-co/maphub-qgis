@@ -579,10 +579,10 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         print(f"Cloning folder: {folder_id}")
 
         # Create the clone dialog
-        clone_dialog = CloneFolderDialog(self)
+        clone_dialog = CloneFolderDialog(self.iface, self)
 
         # Set the folder ID to clone
-        clone_dialog.set_folder_id(folder_id)
+        clone_dialog.on_folder_selected(folder_id)
 
         # Connect to the cloneCompleted signal
         clone_dialog.cloneCompleted.connect(self.on_clone_completed)
