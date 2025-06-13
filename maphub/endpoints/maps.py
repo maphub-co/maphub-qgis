@@ -137,7 +137,7 @@ class MapsEndpoint(BaseEndpoint):
             with open(path, "rb") as f:
                 return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
 
-    def download_map(self, map_id: uuid.UUID, path: str):
+    def download_map(self, map_id: uuid.UUID, path: str, file_format: str | None = None):
         """
         Downloads a map from a remote server and saves it to the specified path.
 
@@ -146,8 +146,16 @@ class MapsEndpoint(BaseEndpoint):
         :param path: File system path where the downloaded map will be stored.
         :type path: str
         :return: None
+        :param file_format: Defines the file format to be used for downloading the version.
+        :type file_format: str | None
         """
-        response = self._make_request("GET", f"/maps/{map_id}/download")
+
+        endpoint = f"/maps/{map_id}/download"
+
+        if file_format:
+            endpoint += f"?file_format={file_format}"
+
+        response = self._make_request("GET", endpoint)
         with open(path, "wb") as f:
             f.write(response.content)
 

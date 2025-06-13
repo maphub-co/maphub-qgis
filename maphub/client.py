@@ -382,7 +382,7 @@ class MapHubClient:
         )
         return self.maps.upload_map(map_name, project_id, public, path)
 
-    def download_map(self, map_id: uuid.UUID, path: str):
+    def download_map(self, map_id: uuid.UUID, path: str, file_format: str | None = None):
         """
         DEPRECATED: Use maps.download_map() instead. Will be removed in a future version.
 
@@ -392,6 +392,8 @@ class MapHubClient:
         :type map_id: uuid.UUID
         :param path: File system path where the downloaded map will be stored.
         :type path: str
+        :param file_format: Defines the file format to be used for downloading the map.
+        :type file_format: str | None
         :return: None
         """
         warnings.warn(
@@ -400,7 +402,7 @@ class MapHubClient:
             DeprecationWarning,
             stacklevel=2
         )
-        return self.maps.download_map(map_id, path)
+        return self.maps.download_map(map_id, path, file_format)
 
     # Helper methods for clone, pull, and push operations
     def _calculate_checksum(self, file_path: str) -> str:
@@ -557,7 +559,7 @@ class MapHubClient:
         return maphub_dir
 
     # Main methods for clone, pull, and push operations
-    def clone_map(self, map_id: uuid.UUID, output_dir: Path, maphub_dir: Path) -> None:
+    def clone_map(self, map_id: uuid.UUID, output_dir: Path, maphub_dir: Path, file_format: str | None = None) -> None:
         """
         Clone a single map from MapHub.
 
@@ -565,6 +567,7 @@ class MapHubClient:
             map_id: UUID of the map to clone
             output_dir: Directory to save the map in
             maphub_dir: Path to the .maphub directory
+            file_format: Defines the file format to be used for downloading the map
         """
         try:
             map_data = self.maps.get_map(map_id)['map']
@@ -574,7 +577,7 @@ class MapHubClient:
             file_path = self._get_file_path_for_map(map_data, output_dir)
 
             # Download the map
-            self.maps.download_map(map_id, file_path)
+            self.maps.download_map(map_id, file_path, file_format)
 
             # Save map metadata
             self._save_map_metadata(map_data, map_id, file_path, output_dir, maphub_dir)
@@ -584,7 +587,7 @@ class MapHubClient:
             print(f"Error cloning map {map_id}: {e}")
             raise
 
-    def pull_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path) -> None:
+    def pull_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path, file_format: str | None = None) -> None:
         """
         Pull updates for a single map from MapHub.
 
@@ -593,6 +596,7 @@ class MapHubClient:
             map_metadata: Current map metadata
             root_dir: Root directory of the repository
             maphub_dir: Path to the .maphub directory
+            file_format: Defines the file format to be used for downloading the map
         """
         try:
             # Get the latest map info
@@ -602,6 +606,10 @@ class MapHubClient:
             if map_data["latest_version_id"] != map_metadata["version_id"]:
                 print(f"Pulling updates for map: {map_data.get('name', 'Unnamed Map')}")
 
+                latest_version = self.versions.get_version(map_data["latest_version_id"])
+                if latest_version["state"]["status"] != "completed":
+                    raise Exception(f"New Version {map_data['latest_version_id']} is not ready yet.")
+
                 # Get the current map path
                 map_path = root_dir / map_metadata["path"]
 
@@ -609,7 +617,7 @@ class MapHubClient:
                 file_path = self._get_file_path_for_map(map_data, map_path.parent)
 
                 # Download the map
-                self.maps.download_map(map_id, file_path)
+                self.maps.download_map(map_id, file_path, file_format)
 
                 # Update metadata
                 map_metadata["version_id"] = map_data["latest_version_id"]
@@ -679,7 +687,7 @@ class MapHubClient:
             print(f"Error pushing map {map_id}: {e}")
 
     def clone_folder(self, folder_id: uuid.UUID, local_path: Path, output_dir: Path,
-                     maphub_dir: Optional[Path] = None) -> Path:
+                     maphub_dir: Optional[Path] = None, file_format: str | None = None) -> Path:
         """
         Recursively clone a folder and its contents from MapHub.
 
@@ -688,6 +696,7 @@ class MapHubClient:
             local_path: Local path to save the folder in
             output_dir: Root directory of the repository
             maphub_dir: Path to the .maphub directory, or None if metadata should not be saved yet
+            file_format: Defines the file format to be used for downloading the maps
 
         Returns:
             Path to the cloned folder
@@ -712,7 +721,7 @@ class MapHubClient:
         for map_data in maps:
             try:
                 map_id = uuid.UUID(map_data["id"])
-                self.clone_map(map_id, folder_path, maphub_dir)
+                self.clone_map(map_id, folder_path, maphub_dir, file_format)
                 map_ids.append(str(map_id))
             except APIException as e:
                 print(f"Skipping {map_data.get('id')}, Error: {e.status_code}, {e.message}")
@@ -724,7 +733,7 @@ class MapHubClient:
         for subfolder in subfolders:
             subfolder_id = uuid.UUID(subfolder["id"])
             subfolder_ids.append(str(subfolder_id))
-            self.clone_folder(subfolder_id, folder_path, output_dir, maphub_dir)
+            self.clone_folder(subfolder_id, folder_path, output_dir, maphub_dir, file_format)
 
         # Save folder metadata if maphub_dir is provided
         parent_id = folder_info.get("folder", {}).get("parent_folder_id")
@@ -733,7 +742,7 @@ class MapHubClient:
         return folder_path
 
 
-    def pull_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path) -> None:
+    def pull_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path, file_format: str | None = None) -> None:
         """
         Recursively pull updates for a folder and its contents from MapHub.
 
@@ -742,6 +751,7 @@ class MapHubClient:
             local_path: Local path of the folder
             root_dir: Root directory of the repository
             maphub_dir: Path to the .maphub directory
+            file_format: Defines the file format to be used for downloading the maps
         """
         try:
             # Load folder metadata
@@ -764,13 +774,13 @@ class MapHubClient:
                 if map_file.exists():
                     with open(map_file, "r") as f:
                         map_metadata = json.load(f)
-                    self.pull_map(map_id, map_metadata, root_dir, maphub_dir)
+                    self.pull_map(map_id, map_metadata, root_dir, maphub_dir, file_format)
                 else:
                     try:
                         # New map, clone it
                         print(f"  New map found: {map_data.get('name', 'Unnamed Map')}")
                         map_id = uuid.UUID(map_data["id"])
-                        self.clone_map(map_id, local_path, maphub_dir)
+                        self.clone_map(map_id, local_path, maphub_dir, file_format)
 
                         # Add to folder metadata
                         if str(map_id) not in folder_metadata["maps"]:
@@ -790,11 +800,11 @@ class MapHubClient:
                 if subfolder_file.exists():
                     # Existing subfolder, pull it
                     subfolder_path = local_path / subfolder_name
-                    self.pull_folder(subfolder_id, subfolder_path, root_dir, maphub_dir)
+                    self.pull_folder(subfolder_id, subfolder_path, root_dir, maphub_dir, file_format)
                 else:
                     # New subfolder, clone it
                     print(f"  New subfolder found: {subfolder_name}")
-                    self.clone_folder(subfolder_id, local_path, root_dir, maphub_dir)
+                    self.clone_folder(subfolder_id, local_path, root_dir, maphub_dir, file_format)
 
                     # Add to folder metadata
                     if str(subfolder_id) not in folder_metadata["subfolders"]:
@@ -916,20 +926,21 @@ class MapHubClient:
             import traceback
             traceback.print_exc()
 
-    def clone(self, folder_id: uuid.UUID, output_dir: Path) -> Optional[Path]:
+    def clone(self, folder_id: uuid.UUID, output_dir: Path, file_format: str | None = None) -> Optional[Path]:
         """
         Clone a folder from MapHub to local directory.
 
         Args:
             folder_id: ID of the folder to clone
             output_dir: Path to the output directory
+            file_format: Defines the file format to be used for downloading the maps
         """
         # Create output directory if it doesn't exist
         output_dir.mkdir(exist_ok=True)
 
         try:
             # For folders, first clone the folder structure
-            result_path = self.clone_folder(folder_id, output_dir, output_dir, None)
+            result_path = self.clone_folder(folder_id, output_dir, output_dir, None, file_format)
 
             print(f"Successfully cloned folder structure to {result_path}")
             return result_path
@@ -939,7 +950,7 @@ class MapHubClient:
             traceback.print_exc()
             return None
 
-    def pull(self, root_dir: Path) -> None:
+    def pull(self, root_dir: Path, file_format: str | None = None) -> None:
         """
         Pull latest changes from MapHub.
 
@@ -948,6 +959,7 @@ class MapHubClient:
 
         Args:
             root_dir: Root directory of the repository
+            file_format: Defines the file format to be used for downloading the maps
         """
         maphub_dir = root_dir / ".maphub"
 
@@ -964,7 +976,7 @@ class MapHubClient:
 
         # Pull the folder
         try:
-            self.pull_folder(folder_id, root_dir, root_dir, maphub_dir)
+            self.pull_folder(folder_id, root_dir, root_dir, maphub_dir, file_format)
 
             # Update config
             config["last_sync"] = datetime.now().isoformat()

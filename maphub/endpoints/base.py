@@ -1,3 +1,4 @@
+import json
 import requests
 from requests.exceptions import HTTPError
 from typing import Optional
@@ -48,8 +49,15 @@ class BaseEndpoint:
             response.raise_for_status()
         except HTTPError:
             try:
-                raise APIException(response.status_code, response.json()['detail'])
+                response_text = response.text
+
+                try:
+                    error_message = json.loads(response_text)['detail']
+                except:
+                    error_message = response_text
             except:
-                raise APIException(response.status_code, "API request error.")
+                error_message = "Unknown error"
+
+            raise APIException(response.status_code, error_message)
 
         return response

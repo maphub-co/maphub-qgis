@@ -60,7 +60,7 @@ class VersionEndpoint(BaseEndpoint):
         """
         return self._make_request("GET", f"/versions/{version_id}").json()
 
-    def download_version(self, version_id: uuid.UUID, path: str):
+    def download_version(self, version_id: uuid.UUID, path: str, file_format: str | None = None):
         """
         Downloads a specific version of a resource and writes its content to a specified file path.
 
@@ -71,9 +71,16 @@ class VersionEndpoint(BaseEndpoint):
         :type version_id: uuid.UUID
         :param path: The file path where the downloaded version content will be saved.
         :type path: str
+        :param file_format: Defines the file format to be used for downloading the version.
+        :type file_format: str | None
         :return: None
         """
-        response = self._make_request("GET", f"/versions/{version_id}/download")
+        endpoint = f"/versions/{version_id}/download"
+
+        if file_format:
+            endpoint += f"?file_format={file_format}"
+
+        response = self._make_request("GET", endpoint)
         with open(path, "wb") as f:
             f.write(response.content)
 
