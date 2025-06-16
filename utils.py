@@ -60,7 +60,7 @@ def handled_exceptions(func):
 
     return wrapper
 
-def get_maphub_client():
+def get_maphub_client() -> MapHubClient:
     settings = QSettings()
     api_key = settings.value("MapHubPlugin/api_key", "")
 
@@ -72,7 +72,6 @@ def get_maphub_client():
         if result:
             # User provided an API key
             api_key = dlg.get_api_key()
-            return api_key
         else:
             # User canceled the dialog
             return None
