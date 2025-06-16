@@ -65,6 +65,38 @@ class PushProjectDialog(QDialog, FORM_CLASS):
         # Check if current project has a .maphub folder
         self.check_project_status()
 
+
+    def push_new_project(self):
+        project = QgsProject.instance()
+
+        # Save the current project layers before they get cleared
+        saved_layers = []
+        current_layers = project.mapLayers().values()
+
+        for layer in current_layers:
+            # Store layer information
+            layer_info = {
+                'source': layer.source(),
+                'name': layer.name(),
+                'type': 'vector' if isinstance(layer, QgsVectorLayer) else 'raster' if isinstance(layer,
+                                                                                                  QgsRasterLayer) else 'unknown'
+            }
+
+            # Save style information if available
+            if layer.styleManager().currentStyle():
+                layer_info['style'] = layer.styleManager().style(layer.styleManager().currentStyle())
+                layer_info['style_name'] = layer.styleManager().currentStyle()
+
+            saved_layers.append(layer_info)
+
+        # If there is no saved project yet, clone a folder from MapHub, and merge the in memory Project with the one from the clone.
+        clone_dialog = CloneFolderDialog(self.iface, self)
+        clone_dialog.cloneCompleted.connect(lambda path: self.load_and_append(path, saved_layers))
+        result = clone_dialog.exec_()
+
+        if not result:
+            raise Exception("Project is not linked to MapHub. You must clone a (empty) folder first.")
+
     def check_project_status(self):
         """Check if the current project has a .maphub folder"""
         # Get the current project path
@@ -72,44 +104,17 @@ class PushProjectDialog(QDialog, FORM_CLASS):
         project_filename = project.fileName()
 
         if not project_filename:
-            # Save the current project layers before they get cleared
-            saved_layers = []
-            current_layers = project.mapLayers().values()
-
-            for layer in current_layers:
-                # Store layer information
-                layer_info = {
-                    'source': layer.source(),
-                    'name': layer.name(),
-                    'type': 'vector' if isinstance(layer, QgsVectorLayer) else 'raster' if isinstance(layer, QgsRasterLayer) else 'unknown'
-                }
-
-                # Save style information if available
-                if layer.styleManager().currentStyle():
-                    layer_info['style'] = layer.styleManager().style(layer.styleManager().currentStyle())
-                    layer_info['style_name'] = layer.styleManager().currentStyle()
-
-                saved_layers.append(layer_info)
-
-            # If there is no saved project yet, clone a folder from MapHub, and merge the in memory Project with the one from the clone.
-            clone_dialog = CloneFolderDialog(self.iface, self)
-            clone_dialog.cloneCompleted.connect(lambda path: self.load_and_append(path, saved_layers))
-            result = clone_dialog.exec_()
-
-            if not result:
-                raise Exception("Project is not linked to MapHub. You must clone a (empty) folder first.")
+            self.push_new_project()
         else:
             # Get the project directory
             self.project_path = Path(os.path.dirname(project_filename))
 
-        project_dir = self.project_path
+            # Check if .maphub folder exists
+            maphub_dir = self.project_path / ".maphub"
+            if not maphub_dir.exists():
+                self.push_new_project()
 
-        # Check if .maphub folder exists
-        maphub_dir = project_dir / ".maphub"
-        if not maphub_dir.exists():
-            self.label_status.setText("This project is not linked to MapHub. Use 'Clone Folder' to create a linked project.")
-            self.button_box.button(QtWidgets.QDialogButtonBox.Ok).setEnabled(False)
-            return
+            maphub_dir = self.project_path / ".maphub"
 
         # Check if config.json exists in .maphub folder
         config_file = maphub_dir / "config.json"
@@ -378,7 +383,7 @@ class PushProjectDialog(QDialog, FORM_CLASS):
                         layer_name = layer.name()
                         layer_id = layer.id()
                         is_visible = project.layerTreeRoot().findLayer(layer_id).isVisible()
-                        layer_style = layer.styleManager().style(layer.styleManager().currentStyle())
+                        visuals = get_layer_styles_as_json(layer, {})
 
                         # Create a new layer from the saved file
                         new_layer = None
@@ -389,12 +394,7 @@ class PushProjectDialog(QDialog, FORM_CLASS):
 
                         if new_layer and new_layer.isValid():
                             # Apply the original style to the new layer
-                            if layer_style:
-                                new_layer.styleManager().addStyle(
-                                    layer.styleManager().currentStyle(), 
-                                    layer_style
-                                )
-                                new_layer.styleManager().setCurrentStyle(layer.styleManager().currentStyle())
+                            apply_style_to_layer(new_layer, visuals)
 
                             # Add the new layer to the project
                             project.addMapLayer(new_layer, False)

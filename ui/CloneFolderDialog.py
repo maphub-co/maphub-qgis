@@ -280,6 +280,25 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
         """Return the selected CRS"""
         return self.projectionSelector.crs()
 
+    def get_file_format(self):
+        """Get the selected file format or None if default is selected"""
+        index = self.comboBox_file_format.currentIndex()
+        if index == 0:  # Default option
+            return None
+        elif index == 1:
+            return "gpkg"
+        elif index == 2:
+            return "tif"
+        elif index == 3:
+            return "fgb"
+        elif index == 4:
+            return "geojson"
+        elif index == 5:
+            return "shp"
+        elif index == 6:
+            return "xlsx"
+        return None
+
     def accept(self):
         """Override accept to perform cloning when OK is clicked"""
         # Validate inputs
@@ -295,18 +314,21 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
         # Get the CRS
         crs = self.get_crs()
 
+        # Get the file format
+        file_format = self.get_file_format()
+
         # Hide the dialog but don't close it yet
         self.hide()
 
         # Start the cloning process
-        self.clone_folder(self.selected_folder_id, destination_path, crs)
+        self.clone_folder(self.selected_folder_id, destination_path, crs, file_format)
 
         # Now close the dialog
         super().accept()
 
 
     @handled_exceptions
-    def clone_folder(self, folder_id, destination_path, crs):
+    def clone_folder(self, folder_id, destination_path, crs, file_format=None):
         """Clone a folder from MapHub"""
         print(f"Cloning folder: {folder_id}")
 
@@ -335,7 +357,7 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
             QtWidgets.QApplication.processEvents()
 
             # Use the new clone functionality
-            cloned_folder_path = client.clone(folder_id, destination_path)
+            cloned_folder_path = client.clone(folder_id, destination_path, file_format)
 
             if cloned_folder_path is None:
                 raise Exception("Folder clone failed.")

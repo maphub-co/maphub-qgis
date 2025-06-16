@@ -382,7 +382,7 @@ class MapHubClient:
         )
         return self.maps.upload_map(map_name, project_id, public, path)
 
-    def download_map(self, map_id: uuid.UUID, path: str, file_format: str | None = None):
+    def download_map(self, map_id: uuid.UUID, path: str, file_format: str = None):
         """
         DEPRECATED: Use maps.download_map() instead. Will be removed in a future version.
 
@@ -421,13 +421,14 @@ class MapHubClient:
                 hash_md5.update(chunk)
         return hash_md5.hexdigest()
 
-    def _get_file_path_for_map(self, map_data: Dict[str, Any], save_dir: Path) -> str:
+    def _get_file_path_for_map(self, map_data: Dict[str, Any], save_dir: Path, file_format: str = None) -> str:
         """
         Determine the file path for a map based on its metadata.
 
         Args:
             map_data: Map metadata
             save_dir: Directory to save the map in
+            file_format: Optional file format to override the default
 
         Returns:
             File path for the map
@@ -439,12 +440,18 @@ class MapHubClient:
         # Sanitize the map name for use as a filename
         map_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in map_name)
 
-        # Determine the file extension based on the map type
+        # Determine the file extension based on the map type and file_format
         extension = ".fgb"  # Default to FlatGeoBuf
-        if map_type == "raster":
-            extension = ".tif"
-        elif map_type == "vector":
-            extension = ".fgb"  # FlatGeoBuf format
+
+        # If a specific file_format is provided, use it
+        if file_format:
+            extension = f".{file_format}"
+        else:
+            # Otherwise use the default for the map type
+            if map_type == "raster":
+                extension = ".tif"
+            elif map_type == "vector":
+                extension = ".fgb"  # FlatGeoBuf format
 
         # Create the file path
         file_path = str(save_dir / f"{map_name}{extension}")
@@ -519,14 +526,35 @@ class MapHubClient:
         map_ids = []
         subfolder_ids = []
 
+        # Load config to get type-specific formats
+        file_formats = {}
+        try:
+            with open(maphub_dir / "config.json", "r") as f:
+                config = json.load(f)
+
+            if "file_formats" in config:
+                file_formats = config["file_formats"]
+        except Exception as config_error:
+            print(f"Warning: Could not read config file: {config_error}")
+
         # Process maps
         maps = folder_info["map_infos"]
         for map_data in maps:
             map_id = uuid.UUID(map_data["id"])
             map_ids.append(str(map_id))
 
+            # Get the map type
+            map_type = map_data.get("type", "unknown")
+
+            # Determine the file format to use
+            format_to_use = None
+
+            # Use the format for this map type if available
+            if file_formats and map_type in file_formats:
+                format_to_use = file_formats[map_type]
+
             # Save map metadata
-            file_path = self._get_file_path_for_map(map_data, root_dir / folder_name)
+            file_path = self._get_file_path_for_map(map_data, root_dir / folder_name, format_to_use)
             self._save_map_metadata(map_data, map_id, file_path, root_dir, maphub_dir)
 
         # Process subfolders
@@ -542,7 +570,7 @@ class MapHubClient:
         parent_id = folder_info.get("folder", {}).get("parent_folder_id")
         self._save_folder_metadata(folder_id, folder_name, parent_id, map_ids, subfolder_ids, maphub_dir)
 
-    def _init_dot_maphub_dir(self, folder_id: uuid.UUID, path: Path) -> Path:
+    def _init_dot_maphub_dir(self, folder_id: uuid.UUID, path: Path, file_format: str = None) -> Path:
         # Then create .maphub directory inside the cloned folder
         maphub_dir = path / ".maphub"
         maphub_dir.mkdir(exist_ok=True)
@@ -550,16 +578,34 @@ class MapHubClient:
         (maphub_dir / "folders").mkdir(exist_ok=True)
 
         # Save config
+        config = {
+            "remote_id": str(folder_id),
+            "last_sync": datetime.now().isoformat(),
+            "file_formats": {
+                "raster": "tif",  # Default for raster
+                "vector": "fgb"   # Default for vector
+            }
+        }
+
+        # Store file_format if provided
+        if file_format:
+            # For backward compatibility
+            config["file_format"] = file_format
+
+            # If a specific format is provided, use it for both types
+            # This will be overridden by type-specific formats if set later
+            if file_format in ["tif"]:
+                config["file_formats"]["raster"] = file_format
+            elif file_format in ["geojson", "shp", "gpkg", "xlsx", "fgb"]:
+                config["file_formats"]["vector"] = file_format
+
         with open(maphub_dir / "config.json", "w") as f:
-            json.dump({
-                "remote_id": str(folder_id),
-                "last_sync": datetime.now().isoformat()
-            }, f, indent=2)
+            json.dump(config, f, indent=2)
 
         return maphub_dir
 
     # Main methods for clone, pull, and push operations
-    def clone_map(self, map_id: uuid.UUID, output_dir: Path, maphub_dir: Path, file_format: str | None = None) -> None:
+    def clone_map(self, map_id: uuid.UUID, output_dir: Path, maphub_dir: Path, file_format: str = None) -> None:
         """
         Clone a single map from MapHub.
 
@@ -573,11 +619,33 @@ class MapHubClient:
             map_data = self.maps.get_map(map_id)['map']
             print(f"Cloning map: {map_data.get('name', 'Unnamed Map')}")
 
+            # Get the map type
+            map_type = map_data.get("type", "unknown")
+
+            # Determine the file format to use
+            format_to_use = file_format
+
+            # If no specific format is provided, check if we have type-specific formats in config
+            if not format_to_use:
+                try:
+                    # Load config to get type-specific formats
+                    with open(maphub_dir / "config.json", "r") as f:
+                        config = json.load(f)
+
+                    if "file_formats" in config:
+                        # Use the format for this map type
+                        if map_type == "raster" and "raster" in config["file_formats"]:
+                            format_to_use = config["file_formats"]["raster"]
+                        elif map_type == "vector" and "vector" in config["file_formats"]:
+                            format_to_use = config["file_formats"]["vector"]
+                except Exception as config_error:
+                    print(f"Warning: Could not read config file: {config_error}")
+
             # Get the file path for the map
-            file_path = self._get_file_path_for_map(map_data, output_dir)
+            file_path = self._get_file_path_for_map(map_data, output_dir, format_to_use)
 
             # Download the map
-            self.maps.download_map(map_id, file_path, file_format)
+            self.maps.download_map(map_id, file_path, format_to_use)
 
             # Save map metadata
             self._save_map_metadata(map_data, map_id, file_path, output_dir, maphub_dir)
@@ -587,7 +655,7 @@ class MapHubClient:
             print(f"Error cloning map {map_id}: {e}")
             raise
 
-    def pull_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path, file_format: str | None = None) -> None:
+    def pull_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path, file_format: str = None) -> None:
         """
         Pull updates for a single map from MapHub.
 
@@ -610,14 +678,36 @@ class MapHubClient:
                 if latest_version["state"]["status"] != "completed":
                     raise Exception(f"New Version {map_data['latest_version_id']} is not ready yet.")
 
+                # Get the map type
+                map_type = map_data.get("type", "unknown")
+
+                # Determine the file format to use
+                format_to_use = file_format
+
+                # If no specific format is provided, check if we have type-specific formats in config
+                if not format_to_use:
+                    try:
+                        # Load config to get type-specific formats
+                        with open(maphub_dir / "config.json", "r") as f:
+                            config = json.load(f)
+
+                        if "file_formats" in config:
+                            # Use the format for this map type
+                            if map_type == "raster" and "raster" in config["file_formats"]:
+                                format_to_use = config["file_formats"]["raster"]
+                            elif map_type == "vector" and "vector" in config["file_formats"]:
+                                format_to_use = config["file_formats"]["vector"]
+                    except Exception as config_error:
+                        print(f"Warning: Could not read config file: {config_error}")
+
                 # Get the current map path
                 map_path = root_dir / map_metadata["path"]
 
                 # Get the new file path for the map
-                file_path = self._get_file_path_for_map(map_data, map_path.parent)
+                file_path = self._get_file_path_for_map(map_data, map_path.parent, format_to_use)
 
                 # Download the map
-                self.maps.download_map(map_id, file_path, file_format)
+                self.maps.download_map(map_id, file_path, format_to_use)
 
                 # Update metadata
                 map_metadata["version_id"] = map_data["latest_version_id"]
@@ -687,7 +777,7 @@ class MapHubClient:
             print(f"Error pushing map {map_id}: {e}")
 
     def clone_folder(self, folder_id: uuid.UUID, local_path: Path, output_dir: Path,
-                     maphub_dir: Optional[Path] = None, file_format: str | None = None) -> Path:
+                     maphub_dir: Optional[Path] = None, file_format: str = None) -> Path:
         """
         Recursively clone a folder and its contents from MapHub.
 
@@ -710,7 +800,7 @@ class MapHubClient:
         folder_path = local_path / folder_name
         folder_path.mkdir(exist_ok=True)
         if maphub_dir is None:
-            maphub_dir = self._init_dot_maphub_dir(folder_id, folder_path)
+            maphub_dir = self._init_dot_maphub_dir(folder_id, folder_path, file_format)
 
         # Track maps and subfolders
         map_ids = []
@@ -742,7 +832,7 @@ class MapHubClient:
         return folder_path
 
 
-    def pull_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path, file_format: str | None = None) -> None:
+    def pull_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path, file_format: str = None) -> None:
         """
         Recursively pull updates for a folder and its contents from MapHub.
 
@@ -926,7 +1016,7 @@ class MapHubClient:
             import traceback
             traceback.print_exc()
 
-    def clone(self, folder_id: uuid.UUID, output_dir: Path, file_format: str | None = None) -> Optional[Path]:
+    def clone(self, folder_id: uuid.UUID, output_dir: Path, file_format: str = None) -> Optional[Path]:
         """
         Clone a folder from MapHub to local directory.
 
@@ -950,7 +1040,7 @@ class MapHubClient:
             traceback.print_exc()
             return None
 
-    def pull(self, root_dir: Path, file_format: str | None = None) -> None:
+    def pull(self, root_dir: Path, file_format: str = None) -> None:
         """
         Pull latest changes from MapHub.
 
@@ -973,6 +1063,12 @@ class MapHubClient:
 
         # Get the remote ID
         folder_id = uuid.UUID(config["remote_id"])
+
+        # Use stored file_format if none is provided
+        if file_format is None:
+            # Check for type-specific formats first
+            if "file_formats" in config:
+                print(f"Using stored file formats: {config['file_formats']}")
 
         # Pull the folder
         try:

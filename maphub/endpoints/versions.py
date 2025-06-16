@@ -1,4 +1,7 @@
 import uuid
+import os
+import zipfile
+import tempfile
 from typing import Dict, Any
 
 from .base import BaseEndpoint
@@ -60,12 +63,15 @@ class VersionEndpoint(BaseEndpoint):
         """
         return self._make_request("GET", f"/versions/{version_id}").json()
 
-    def download_version(self, version_id: uuid.UUID, path: str, file_format: str | None = None):
+    def download_version(self, version_id: uuid.UUID, path: str, file_format: str = None):
         """
         Downloads a specific version of a resource and writes its content to a specified file path.
 
         This function sends an HTTP GET request to retrieve the content of the specified version
         using the version ID. The content is then written to the provided file path in binary mode.
+
+        If file_format is "shp", the returned file is a zip file that will be extracted to the
+        specified path.
 
         :param version_id: Unique identifier of the version to download.
         :type version_id: uuid.UUID
@@ -81,8 +87,50 @@ class VersionEndpoint(BaseEndpoint):
             endpoint += f"?file_format={file_format}"
 
         response = self._make_request("GET", endpoint)
-        with open(path, "wb") as f:
-            f.write(response.content)
+
+        # If file_format is "shp", the returned file is a zip file that needs to be extracted
+        if file_format == "shp":
+            # Create a temporary file to store the zip content
+            with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip_file:
+                temp_zip_path = temp_zip_file.name
+                temp_zip_file.write(response.content)
+
+            # Create a temporary directory for extraction
+            temp_dir = tempfile.mkdtemp()
+
+            try:
+                # Extract the zip file to the temporary directory
+                with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+
+                # Get the target directory and base name from the path
+                target_dir = os.path.dirname(os.path.abspath(path))
+                base_name = os.path.basename(os.path.splitext(path)[0])
+
+                # Create the target directory if it doesn't exist
+                os.makedirs(target_dir, exist_ok=True)
+
+                # Rename and move each file to the target directory
+                for file in os.listdir(temp_dir):
+                    file_path = os.path.join(temp_dir, file)
+                    if os.path.isfile(file_path):
+                        # Get the extension of the original file
+                        _, ext = os.path.splitext(file)
+                        # Create the new filename with the target base name and original extension
+                        new_filename = f"{base_name}{ext}"
+                        # Move and rename the file to the target directory
+                        os.rename(file_path, os.path.join(target_dir, new_filename))
+            finally:
+                # Clean up the temporary zip file and directory
+                if os.path.exists(temp_zip_path):
+                    os.unlink(temp_zip_path)
+                if os.path.exists(temp_dir):
+                    import shutil
+                    shutil.rmtree(temp_dir)
+        else:
+            # For other formats, just write the content to the file
+            with open(path, "wb") as f:
+                f.write(response.content)
 
     def set_alias(self, version_id: uuid.UUID, alias: str) -> Dict[str, Any]:
         """

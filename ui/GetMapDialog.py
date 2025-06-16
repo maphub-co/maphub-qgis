@@ -454,8 +454,28 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
 
         item_layout.addLayout(desc_layout, 1)  # Give description area more weight
 
-        # Add buttons
+        # Add buttons and format selection
         button_layout = QtWidgets.QVBoxLayout()
+
+        # Format selection dropdown
+        format_layout = QtWidgets.QHBoxLayout()
+        format_label = QtWidgets.QLabel("Format:")
+        format_combo = QtWidgets.QComboBox()
+
+        # Set object name for the combo box to find it later
+        format_combo.setObjectName(f"format_combo_{map_data['id']}")
+
+        # Add format options based on map type
+        if map_data.get('type') == 'raster':
+            format_combo.addItem("GeoTIFF (.tif)", "tif")
+        elif map_data.get('type') == 'vector':
+            format_combo.addItem("FlatGeobuf (.fgb)", "fgb")
+            format_combo.addItem("Shapefile (.shp)", "shp")
+            format_combo.addItem("GeoPackage (.gpkg)", "gpkg")
+
+        format_layout.addWidget(format_label)
+        format_layout.addWidget(format_combo)
+        button_layout.addLayout(format_layout)
 
         # Button 1 - Download
         btn_download = QtWidgets.QPushButton("Download")
@@ -493,18 +513,42 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
     def on_download_clicked(self, map_data):
         print(f"Downloading map: {map_data.get('name')}")
 
+        # Find the format combo box for this map
+        format_combo = self.findChild(QtWidgets.QComboBox, f"format_combo_{map_data['id']}")
+        if not format_combo:
+            raise Exception("Format selection not found")
+
+        # Get the selected format
+        selected_format = format_combo.currentData()
+
+        # Determine file extension and filter based on selected format
+        file_extension = f".{selected_format}"
+
+        # Create filter string based on selected format
+        if selected_format == "tif":
+            filter_string = "GeoTIFF (*.tif);;All Files (*)"
+        elif selected_format == "fgb":
+            filter_string = "FlatGeobuf (*.fgb);;All Files (*)"
+        elif selected_format == "shp":
+            filter_string = "Shapefile (*.shp);;All Files (*)"
+        elif selected_format == "gpkg":
+            filter_string = "GeoPackage (*.gpkg);;All Files (*)"
+        else:
+            filter_string = "All Files (*)"
+
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Save Map",
-            f"{map_data.get('name', 'map')}.tif" if map_data.get('type') == 'raster' else f"{map_data.get('name', 'map')}.fgb",
-            "GeoTIFF (*.tif);;All Files (*)" if map_data.get('type') == 'raster' else "FlatGeobuf (*.fgb);;All Files (*)"
+            f"{map_data.get('name', 'map')}{file_extension}",
+            filter_string
         )
 
         # If user cancels the dialog, return early
         if not file_path:
             return
 
-        get_maphub_client().maps.download_map(map_data['id'], file_path)
+        # Download the map with the selected format
+        get_maphub_client().maps.download_map(map_data['id'], file_path, selected_format)
 
         # Adding downloaded file to layers
         if not os.path.exists(file_path):

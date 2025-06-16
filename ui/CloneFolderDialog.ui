@@ -146,6 +146,56 @@ This will download all maps in the folder and create a QGIS project.</string>
         </item>
        </layout>
       </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_file_format">
+        <item>
+         <widget class="QLabel" name="label_file_format">
+          <property name="text">
+           <string>File Format:</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="comboBox_file_format">
+          <item>
+           <property name="text">
+            <string>Default</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>GeoPackage (.gpkg)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>GeoTIFF (.tif)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>FlatGeobuf (.fgb)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>GeoJSON (.geojson)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Shapefile (.shp)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Excel (.xlsx)</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+       </layout>
+      </item>
      </layout>
     </widget>
    </item>
