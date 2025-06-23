@@ -185,3 +185,120 @@ def apply_style_to_layer(layer, visuals: Dict[str, Any]):
     # If both methods failed, return False
     print(f"Failed to apply any style to layer '{layer.name()}'. Available style keys: {list(visuals.keys())}")
     return False
+
+
+def layer_position(project, layer):
+    """
+    Extract the exact position of a layer within the project's layer tree.
+
+    Args:
+        project (QgsProject): The QGIS project instance
+        layer (QgsMapLayer): The layer to find the position for
+
+    Returns:
+        list: A list of indices representing the path to the layer in the tree,
+              where each index is the position within its parent group
+    """
+    # Get the layer tree root
+    root = project.layerTreeRoot()
+
+    # Find the layer node in the tree
+    layer_node = root.findLayer(layer.id())
+
+    if not layer_node:
+        # Layer not found in the tree
+        return []
+
+    # Initialize the position list
+    position = []
+
+    # Start with the layer node
+    current_node = layer_node
+
+    # Traverse up the tree to build the position path
+    while current_node and current_node.parent():
+        # Get the parent node
+        parent = current_node.parent()
+
+        # Get the index of the current node within its parent's children
+        index = parent.children().index(current_node)
+
+        # Add the index to the beginning of our position list
+        position.insert(0, index)
+
+        # Move up to the parent
+        current_node = parent
+
+        # Stop if we've reached the root
+        if current_node == root:
+            break
+
+    return position
+
+
+def place_layer_at_position(project, layer, position):
+    """
+    Place a layer at a specific position in the project's layer tree.
+
+    Args:
+        project (QgsProject): The QGIS project instance
+        layer (QgsMapLayer): The layer to place
+        position (list): A list of indices representing the path to the layer in the tree,
+                        where each index is the position within its parent group
+
+    Returns:
+        bool: True if the layer was successfully placed, False otherwise
+    """
+    if not position:
+        # If no position is specified, add the layer to the root
+        project.addMapLayer(layer)
+        return True
+
+    # Get the layer tree root
+    root = project.layerTreeRoot()
+
+    # Add the layer to the project without adding it to the layer tree
+    project.addMapLayer(layer, False)
+
+    # Start with the root node
+    current_node = root
+
+    # Traverse the tree to find the correct parent group
+    for i, index in enumerate(position[:-1]):  # All but the last index
+        # Get the children of the current node
+        children = current_node.children()
+
+        # Check if the index is valid
+        if index >= len(children):
+            # Index is out of range, add the layer to the current node
+            current_node.addLayer(layer)
+            return True
+
+        # Get the child at the specified index
+        child = children[index]
+
+        # Check if the child is a group
+        if not child.nodeType() == child.NodeGroup:
+            # Child is not a group, add the layer to the current node
+            current_node.addLayer(layer)
+            return True
+
+        # Move to the next level
+        current_node = child
+
+    # At this point, current_node is the parent group where the layer should be added
+    # Get the last index from the position list
+    last_index = position[-1]
+
+    # Get the children of the current node
+    children = current_node.children()
+
+    # Check if the last index is valid
+    if last_index >= len(children):
+        # Last index is out of range, add the layer to the end of the current node
+        current_node.addLayer(layer)
+    else:
+        # Insert the layer at the specified position
+        current_node.insertLayer(last_index, layer)
+
+    return True

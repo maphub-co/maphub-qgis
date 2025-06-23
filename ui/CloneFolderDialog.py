@@ -13,7 +13,7 @@ from qgis.PyQt.QtWidgets import QDialog, QFileDialog
 from qgis.core import (QgsCoordinateReferenceSystem, QgsProject, QgsVectorLayer, 
                       QgsRasterLayer, QgsMapLayer)
 
-from ..utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json
+from ..utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, place_layer_at_position
 from .CreateFolderDialog import CreateFolderDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
@@ -476,23 +476,41 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
                 if file.endswith(('.shp', '.gpkg', '.geojson', '.kml', '.fgb')):
                     layer = QgsVectorLayer(str(file_path), file_path.stem, "ogr")
                     if layer.isValid():
-                        # Apply style directly from memory if available
+                        # Get the visuals data for this layer
+                        layer_visuals = None
                         if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
-                            apply_style_to_layer(layer, self.file_styles[str(file_path)])
+                            layer_visuals = self.file_styles[str(file_path)]
+                            apply_style_to_layer(layer, layer_visuals)
                             print(f"Applied style to layer {layer.name()} directly from memory")
 
-                        project.addMapLayer(layer)
+                        # Check if layer_order is available in the visuals data
+                        if layer_visuals and "layer_order" in layer_visuals:
+                            # Place the layer at the specified position
+                            place_layer_at_position(project, layer, layer_visuals["layer_order"])
+                            print(f"Placed layer {layer.name()} at position {layer_visuals['layer_order']}")
+                        else:
+                            # Fall back to adding the layer to the root
+                            project.addMapLayer(layer)
 
                 # Add raster layers
                 elif file.endswith(('.tif', '.tiff', '.jpg', '.png')):
                     layer = QgsRasterLayer(str(file_path), file_path.stem)
                     if layer.isValid():
-                        # Apply style directly from memory if available
+                        # Get the visuals data for this layer
+                        layer_visuals = None
                         if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
-                            apply_style_to_layer(layer, self.file_styles[str(file_path)])
+                            layer_visuals = self.file_styles[str(file_path)]
+                            apply_style_to_layer(layer, layer_visuals)
                             print(f"Applied style to layer {layer.name()} directly from memory")
 
-                        project.addMapLayer(layer)
+                        # Check if layer_order is available in the visuals data
+                        if layer_visuals and "layer_order" in layer_visuals:
+                            # Place the layer at the specified position
+                            place_layer_at_position(project, layer, layer_visuals["layer_order"])
+                            print(f"Placed layer {layer.name()} at position {layer_visuals['layer_order']}")
+                        else:
+                            # Fall back to adding the layer to the root
+                            project.addMapLayer(layer)
 
         # Save the project
         project_path = folder_path / f"{folder_name}.qgz"

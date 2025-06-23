@@ -14,7 +14,7 @@ from qgis.core import (
 )
 
 from .CloneFolderDialog import CloneFolderDialog
-from ..utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json
+from ..utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, layer_position
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -212,16 +212,50 @@ class PushProjectDialog(QDialog, FORM_CLASS):
         # Now close the dialog
         super().accept()
 
+    def check_layers_crs(self):
+        """
+        Check if all layers in the project have a CRS defined.
+
+        Returns:
+            tuple: (bool, list) - A tuple containing a boolean indicating if all layers have a CRS defined,
+                   and a list of layer names that don't have a CRS defined.
+        """
+        # Get the current project
+        project = QgsProject.instance()
+
+        # Get all layers in the project
+        layers = project.mapLayers().values()
+
+        # Check each layer for a CRS
+        layers_without_crs = []
+        for layer in layers:
+            if not layer.crs().isValid():
+                layers_without_crs.append(layer.name())
+
+        return len(layers_without_crs) == 0, layers_without_crs
+
     @handled_exceptions
     def push_project(self):
         """
         Push the project data to MapHub.
 
-        This method first saves all local layers to disk to ensure that all edits
-        are committed before pushing to MapHub, then pushes the project data to
-        the linked MapHub folder.
+        This method first checks if all layers have a CRS defined, then saves all local layers 
+        to disk to ensure that all edits are committed before pushing to MapHub, then pushes 
+        the project data to the linked MapHub folder.
         """
         print(f"Pushing project to MapHub folder: {self.folder_id}")
+
+        # Check if all layers have a CRS defined
+        all_layers_have_crs, layers_without_crs = self.check_layers_crs()
+        if not all_layers_have_crs:
+            # Create a formatted list of layer names
+            layer_list = "\n- ".join(layers_without_crs)
+            QMessageBox.warning(
+                self.parent,
+                "CRS Not Defined",
+                f"The following layers do not have a Coordinate Reference System (CRS) defined:\n- {layer_list}\n\nPlease define a CRS for these layers before pushing to MapHub."
+            )
+            return
 
         # Create progress dialog
         progress = QProgressBar()
@@ -289,7 +323,7 @@ class PushProjectDialog(QDialog, FORM_CLASS):
             QMessageBox.critical(
                 self.parent,
                 "Push Failed",
-                f"Error pushing project: {str(e)}"
+                f"Error pushing project:\n {str(e)}"
             )
 
     def save_all_layers(self):
@@ -426,15 +460,16 @@ class PushProjectDialog(QDialog, FORM_CLASS):
 
     def update_qgis_visuals(self):
         """Update QGIS visuals for all layers in the project"""
-        # Get the current project
-        project = QgsProject.instance()
 
-        # Get all layers in the project
-        layers = project.mapLayers().values()
+        try:
+            # Get the current project
+            project = QgsProject.instance()
 
-        # Update visuals for each layer
-        for layer in layers:
-            try:
+            # Get all layers in the project
+            layers = project.mapLayers().values()
+
+            # Update visuals for each layer
+            for layer in layers:
                 # Skip layers that don't have a file source
                 if not hasattr(layer, 'source') or not layer.source():
                     continue
@@ -461,14 +496,12 @@ class PushProjectDialog(QDialog, FORM_CLASS):
 
                 if map_id:
                     # Extract style information
-                    try:
-                        visuals = get_layer_styles_as_json(layer, {})
+                    visuals = get_layer_styles_as_json(layer, {})
+                    visuals["layer_order"] = layer_position(project, layer)
 
-                        # Set the visuals for the map
-                        client = get_maphub_client()
-                        client.maps.set_visuals(uuid.UUID(map_id), visuals)
-                        print(f"Updated visuals for map: {layer.name()}")
-                    except Exception as e:
-                        print(f"Warning: Failed to extract or update layer style: {str(e)}")
-            except Exception as e:
-                print(f"Error updating visuals for layer {layer.name()}: {e}")
+                    # Set the visuals for the map
+                    client = get_maphub_client()
+                    client.maps.set_visuals(uuid.UUID(map_id), visuals)
+                    print(f"Updated visuals for map: {layer.name()}")
+        except Exception as e:
+            raise Exception(f"Error updating QGIS visuals: {str(e)}")
