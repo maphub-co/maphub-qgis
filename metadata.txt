@@ -6,7 +6,7 @@
 name=MapHub
 qgisMinimumVersion=3.0
 description=QGIS plugin for uploading, sharing, and managing geospatial data with the MapHub.co platform
-version=0.6
+version=0.7
 author=MapHub
 email=maphub@meteory.eu
 
