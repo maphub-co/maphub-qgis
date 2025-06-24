@@ -1,4 +1,5 @@
 import json
+import traceback
 from typing import Dict, Any
 
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
@@ -33,6 +34,8 @@ def handled_exceptions(func):
         try:
             func(*args, **kwargs)
         except APIException as e:
+            print(traceback.format_exc())
+
             if e.status_code == 500:
                 show_error_dialog(
                     "Error from the MapHub server. A Bug report is sent and the issue will be investigated asap.",
@@ -56,6 +59,7 @@ def handled_exceptions(func):
             else:
                 show_error_dialog(f"Code {e.status_code}: {e.message}", "Error uploading map to MapHub")
         except Exception as e:
+            print(traceback.format_exc())
             show_error_dialog(f"{e}", "Error")
 
     return wrapper
