@@ -373,6 +373,11 @@ class PushProjectDialog(QDialog, FORM_CLASS):
 
                         # Determine the appropriate extension based on layer type
                         if isinstance(layer, QgsVectorLayer):
+                            # Check if the vector layer has features
+                            if layer.featureCount() == 0:
+                                print(f"Skipping vector layer with no features: {layer.name()}")
+                                continue
+
                             new_filename = new_filename.with_suffix('.fgb')
                             # Save vector layer to FlatGeoBuf
                             error = QgsVectorFileWriter.writeAsVectorFormat(
