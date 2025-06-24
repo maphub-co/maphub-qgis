@@ -114,7 +114,7 @@ class PushProjectDialog(QDialog, FORM_CLASS):
             if not maphub_dir.exists():
                 self.push_new_project()
 
-            maphub_dir = self.project_path / ".maphub"
+        maphub_dir = self.project_path / ".maphub"
 
         # Check if config.json exists in .maphub folder
         config_file = maphub_dir / "config.json"
@@ -364,104 +364,101 @@ class PushProjectDialog(QDialog, FORM_CLASS):
 
                 # If the layer is not in the project folder, save it there
                 if not str(source_path).startswith(str(self.project_path)):
-                    try:
-                        print(f"Saving layer to project folder: {layer.name()}")
+                    print(f"Saving layer to project folder: {layer.name()}")
 
-                        # Create a new filename in the project folder with sanitized name
-                        sanitized_name = self.sanitize_filename(layer.name())
-                        new_filename = self.project_path / sanitized_name
+                    # Create a new filename in the project folder with sanitized name
+                    sanitized_name = self.sanitize_filename(layer.name())
+                    new_filename = self.project_path / sanitized_name
 
-                        # Determine the appropriate extension based on layer type
-                        if isinstance(layer, QgsVectorLayer):
-                            # Check if the vector layer has features
-                            if layer.featureCount() == 0:
-                                print(f"Skipping vector layer with no features: {layer.name()}")
-                                continue
+                    # Determine the appropriate extension based on layer type
+                    if isinstance(layer, QgsVectorLayer):
+                        # Check if the vector layer has features
+                        if layer.featureCount() == 0:
+                            print(f"Skipping vector layer with no features: {layer.name()}")
+                            continue
 
-                            new_filename = new_filename.with_suffix('.fgb')
-                            # Save vector layer to FlatGeoBuf
-                            error = QgsVectorFileWriter.writeAsVectorFormat(
-                                layer,
-                                str(new_filename),
-                                'UTF-8',
-                                layer.crs(),
-                                'FlatGeobuf'
-                            )
-                            if error[0] != QgsVectorFileWriter.NoError:
-                                print(f"Error saving vector layer {layer.name()}: {error}")
+                        new_filename = new_filename.with_suffix('.fgb')
+                        # Save vector layer to FlatGeoBuf
+                        error = QgsVectorFileWriter.writeAsVectorFormat(
+                            layer,
+                            str(new_filename),
+                            'UTF-8',
+                            layer.crs(),
+                            'FlatGeobuf'
+                        )
+                        if error[0] != QgsVectorFileWriter.NoError:
+                            print(f"Error saving vector layer {layer.name()}: {error}")
 
-                        elif isinstance(layer, QgsRasterLayer):
-                            new_filename = new_filename.with_suffix('.tif')
-                            # Save raster layer to GeoTIFF
-                            pipe = QgsRasterPipe()
-                            provider = layer.dataProvider()
-                            if not pipe.set(provider.clone()):
-                                print(f"Cannot set pipe provider for raster layer: {layer.name()}")
-                                continue
+                    elif isinstance(layer, QgsRasterLayer):
+                        new_filename = new_filename.with_suffix('.tif')
+                        # Save raster layer to GeoTIFF
+                        pipe = QgsRasterPipe()
+                        provider = layer.dataProvider()
+                        if not pipe.set(provider.clone()):
+                            print(f"Cannot set pipe provider for raster layer: {layer.name()}")
+                            continue
 
-                            writer = QgsRasterFileWriter(str(new_filename))
-                            writer.setOutputFormat('GTiff')
+                        writer = QgsRasterFileWriter(str(new_filename))
+                        writer.setOutputFormat('GTiff')
 
-                            # Write the raster
-                            error = writer.writeRaster(
-                                pipe,
-                                provider.xSize(),
-                                provider.ySize(),
-                                provider.extent(),
-                                provider.crs()
-                            )
+                        # Write the raster
+                        error = writer.writeRaster(
+                            pipe,
+                            provider.xSize(),
+                            provider.ySize(),
+                            provider.extent(),
+                            provider.crs()
+                        )
 
-                            if error != QgsRasterFileWriter.NoError:
-                                print(f"Error saving raster layer {layer.name()}: {error}")
-                                continue
+                        if error != QgsRasterFileWriter.NoError:
+                            print(f"Error saving raster layer {layer.name()}: {error}")
+                            continue
 
-                        # Add the newly saved layer to the project and replace the old one
-                        print(f"Layer saved to: {new_filename}")
+                    # Add the newly saved layer to the project and replace the old one
+                    print(f"Layer saved to: {new_filename}")
 
-                        # Get the layer's properties before removing it
-                        layer_name = layer.name()
-                        layer_id = layer.id()
-                        is_visible = project.layerTreeRoot().findLayer(layer_id).isVisible()
-                        visuals = get_layer_styles_as_json(layer, {})
+                    # Get the layer's properties before removing it
+                    layer_name = layer.name()
+                    layer_id = layer.id()
+                    is_visible = project.layerTreeRoot().findLayer(layer_id).isVisible()
+                    visuals = get_layer_styles_as_json(layer, {})
 
-                        # Create a new layer from the saved file
-                        new_layer = None
-                        if isinstance(layer, QgsVectorLayer):
-                            new_layer = QgsVectorLayer(str(new_filename), layer_name, "ogr")
-                        elif isinstance(layer, QgsRasterLayer):
-                            new_layer = QgsRasterLayer(str(new_filename), layer_name)
+                    # Create a new layer from the saved file
+                    new_layer = None
+                    if isinstance(layer, QgsVectorLayer):
+                        new_layer = QgsVectorLayer(str(new_filename), layer_name, "ogr")
+                    elif isinstance(layer, QgsRasterLayer):
+                        new_layer = QgsRasterLayer(str(new_filename), layer_name)
 
-                        if new_layer and new_layer.isValid():
-                            # Apply the original style to the new layer
-                            apply_style_to_layer(new_layer, visuals)
+                    if new_layer and new_layer.isValid():
+                        # Apply the original style to the new layer
+                        apply_style_to_layer(new_layer, visuals)
 
-                            # Add the new layer to the project
-                            project.addMapLayer(new_layer, False)
+                        # Add the new layer to the project
+                        project.addMapLayer(new_layer, False)
 
-                            # Get the layer tree and find the old layer's node
-                            root = project.layerTreeRoot()
-                            old_node = root.findLayer(layer_id)
-                            if old_node:
-                                # Get the parent group
-                                parent = old_node.parent()
+                        # Get the layer tree and find the old layer's node
+                        root = project.layerTreeRoot()
+                        old_node = root.findLayer(layer_id)
+                        if old_node:
+                            # Get the parent group
+                            parent = old_node.parent()
 
-                                # Add the new layer to the same group
-                                new_node = parent.insertLayer(parent.children().index(old_node), new_layer)
+                            # Add the new layer to the same group
+                            new_node = parent.insertLayer(parent.children().index(old_node), new_layer)
 
-                                # Set visibility to match the old layer
-                                new_node.setItemVisibilityChecked(is_visible)
+                            # Set visibility to match the old layer
+                            new_node.setItemVisibilityChecked(is_visible)
 
-                                # Remove the old layer
-                                parent.removeChildNode(old_node)
-                                print(f"Replaced layer {layer_name} with saved version")
-                            else:
-                                # If we can't find the old node, just add the new layer
-                                root.addLayer(new_layer)
-                                print(f"Added new layer {layer_name} (couldn't find old layer in tree)")
+                            # Remove the old layer
+                            parent.removeChildNode(old_node)
+                            print(f"Replaced layer {layer_name} with saved version")
                         else:
-                            print(f"Failed to create valid layer from saved file: {new_filename}")
-                    except Exception as e:
-                        print(f"Error saving layer {layer.name()} to project folder: {str(e)}")
+                            # If we can't find the old node, just add the new layer
+                            root.addLayer(new_layer)
+                            print(f"Added new layer {layer_name} (couldn't find old layer in tree)")
+                    else:
+                        print(f"Failed to create valid layer from saved file: {new_filename}")
 
     def update_qgis_visuals(self):
         """Update QGIS visuals for all layers in the project"""
