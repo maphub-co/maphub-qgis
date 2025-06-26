@@ -23,7 +23,8 @@ from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
 from ...utils import get_maphub_client, handled_exceptions, apply_style_to_layer
-from .MapHubBaseDialog import MapHubBaseDialog
+from .MapHubBaseDialog import MapHubBaseDialog, style
+from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
 
 
 class ThumbnailLoader(QThread):
@@ -58,20 +59,15 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         self.iface = iface
         self.thumb_loaders = []
 
-        # Initialize folder navigation history
-        self.folder_history = []
-        self.current_folder = []
-
         self.list_layout = self.findChild(QtWidgets.QVBoxLayout, 'listLayout')
+
+        # The workspace navigation widget will be created when needed in on_tab_changed
+        self.workspace_nav_widget = None
 
         # Clear layout
         self.clear_list_layout()
 
-        # Initialize UI components
-        self._populate_workspaces_combobox()
-
         # Connect signals
-        self.comboBox_workspace.currentIndexChanged.connect(self.on_workspace_selected)
         self.tabWidget_map_type.currentChanged.connect(self.on_tab_changed)
         self.pushButton_search.clicked.connect(self.on_search_clicked)
         self.lineEdit_search.returnPressed.connect(self.on_search_clicked)
@@ -113,88 +109,48 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         self.clear_list_layout()
 
         if index == 0:  # workspace Maps tab
-            # If a workspace is already selected, load its maps
-            if self.comboBox_workspace.count() > 0:
-                self.on_workspace_selected(self.comboBox_workspace.currentIndex())
-            else:
-                no_maps_label = QLabel(f"You dont have any workspaces yet. Check out the public maps instead.")
-                no_maps_label.setAlignment(Qt.AlignCenter)
-                self.list_layout.addWidget(no_maps_label)
+            # Recreate the workspace navigation widget if it was deleted
+            if not hasattr(self, 'workspace_nav_widget') or self.workspace_nav_widget is None:
+                self.workspace_nav_widget = WorkspaceNavigationWidget(self)
+                self.workspace_nav_widget.folder_clicked.connect(self.on_folder_navigation)
+                self.workspace_nav_widget.set_add_select_button(False)  # We don't need select buttons in this dialog
+
+                # Add custom button configuration for "Tiling All" functionality
+                custom_button = {
+                    'text': 'Tiling All',
+                    'tooltip': 'Add all maps in this folder as tiling services',
+                    'callback': self.on_tiling_all_clicked
+                }
+                self.workspace_nav_widget.set_custom_button(custom_button)
+
+            # Add the workspace navigation widget to the layout
+            self.list_layout.addWidget(self.workspace_nav_widget)
 
         else:  # Public Maps tab
+            # Remove the workspace navigation widget from the layout if it's there
+            if hasattr(self, 'workspace_nav_widget') and self.workspace_nav_widget is not None:
+                self.workspace_nav_widget.setParent(None)
+                self.workspace_nav_widget = None  # Clear the reference to allow garbage collection
+
             # Load public maps with default sorting (Recent)
             self.load_public_maps()
 
-    def on_workspace_selected(self, index):
-        """Handle workspace selection change"""
-        if index < 0:
-            return
 
-        # Only respond if we're on the workspace maps tab
-        if self.tabWidget_map_type.currentIndex() == 0:
-            workspace_id = self.comboBox_workspace.itemData(index)
-            root_folder = get_maphub_client().folder.get_root_folder(workspace_id)
-            folder_id = root_folder["folder"]["id"]
+    def on_folder_navigation(self, folder_id):
+        """Handle folder navigation from the WorkspaceNavigationWidget"""
+        # Load the maps for the selected folder
+        self.load_maps_for_folder(folder_id)
 
-            # Reset workspace history
-            self.folder_history = [folder_id]
+    def load_maps_for_folder(self, folder_id):
+        """Load maps for a folder (without handling folder navigation)"""
+        # Get folder details including maps
+        folder_details = get_maphub_client().folder.get_folder(folder_id)
+        maps = folder_details.get("map_infos", [])
 
-            # Load folder contents
-            self.load_folder_maps(folder_id)
+        # Display maps
+        self.load_maps(maps)
 
-    def on_folder_clicked(self, folder_id):
-        """Handle click on a folder item"""
-        # Add the folder to the navigation history
-        self.folder_history.append(folder_id)
-
-        # Load the contents of the clicked folder
-        self.load_folder_maps(folder_id)
-
-    def add_navigation_controls(self):
-        """Add navigation controls for folder browsing"""
-        nav_frame = QtWidgets.QFrame()
-        nav_frame.setStyleSheet("background-color: #f0f0f0; border-radius: 4px;")
-        nav_layout = QtWidgets.QHBoxLayout(nav_frame)
-        nav_layout.setContentsMargins(5, 5, 5, 5)
-        nav_layout.setSpacing(5)
-
-        # Back button
-        back_button = QPushButton("← Back")
-        back_button.setMaximumWidth(80)
-        back_button.clicked.connect(self.navigate_back)
-        back_button.setEnabled(len(self.folder_history) > 1)
-        nav_layout.addWidget(back_button)
-
-        # Current folder path
-        if self.folder_history:
-            # Get the current folder details
-            folder_id = self.folder_history[-1]
-            folder_details = get_maphub_client().folder.get_folder(folder_id)
-            folder_name = folder_details["folder"].get("name", "Unknown Folder")
-
-            # Create a label for the current folder
-            current_folder_label = QtWidgets.QLabel(f"Current folder: {folder_name}")
-            current_folder_label.setStyleSheet("font-weight: bold;")
-            nav_layout.addWidget(current_folder_label)
-
-        # Add spacer
-        nav_layout.addItem(QtWidgets.QSpacerItem(
-            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
-
-        # Add to layout before the list items
-        self.list_layout.addWidget(nav_frame)
-
-    def navigate_back(self):
-        """Navigate back to the previous folder"""
-        if len(self.folder_history) > 1:
-            # Remove the current folder from history
-            self.folder_history.pop()
-
-            # Get the previous folder
-            previous_folder_id = self.folder_history[-1]
-
-            # Load the previous folder without adding to history
-            self.load_folder_maps(previous_folder_id)
+    # Navigation controls are now handled by ProjectNavigationWidget
 
     def on_search_clicked(self):
         """Handle search button click"""
@@ -227,28 +183,7 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
             return "stars"
         return "recent"  # Default
 
-    def load_folder_maps(self, folder_id):
-        """Load maps and subfolders for a folder"""
-        # Clear any existing items
-        self.clear_list_layout()
-
-        # Get folder details including child folders
-        folder_details = get_maphub_client().folder.get_folder(folder_id)
-        child_folders = folder_details.get("child_folders", [])
-
-        # Add navigation controls if we have folder history
-        if self.folder_history:
-            self.add_navigation_controls()
-
-        # Display child folders first
-        for folder in child_folders:
-            self.add_folder_item(folder)
-
-        # Get maps
-        maps = folder_details.get("map_infos", [])
-
-        # Display maps
-        self.load_maps(maps)
+    # Folder navigation is now handled by ProjectNavigationWidget
 
     def load_public_maps(self, sort_by="recent", page=1, append=False):
         """Load public maps with optional sorting and pagination"""
@@ -310,83 +245,13 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
             for map_data in maps:
                 self.add_map_item(map_data)
 
-    def _populate_workspaces_combobox(self):
-        """Populate the options combobox with items returned from a function."""
-        self.comboBox_workspace.clear()
 
-        # Get the root workspace to find child workspaces
-        client = get_maphub_client()
-        workspaces = client.workspace.get_workspaces()
-
-        for workspace in workspaces:
-            workspace_id = workspace.get('id')
-            workspace_name = workspace.get('name', 'Unknown Workspace')
-            self.comboBox_workspace.addItem(workspace_name, workspace_id)
-
-    def add_folder_item(self, folder_data):
-        """Create a frame for each folder item."""
-        item_frame = QtWidgets.QFrame()
-        item_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        item_frame.setFrameShadow(QtWidgets.QFrame.Raised)
-        item_frame.setMinimumHeight(40)
-
-        # Set margin and spacing for a more compact look
-        item_layout = QtWidgets.QHBoxLayout(item_frame)
-        item_layout.setContentsMargins(5, 5, 5, 5)
-        item_layout.setSpacing(5)
-
-        # Add folder icon
-        folder_icon_label = QtWidgets.QLabel()
-        folder_icon_label.setFixedSize(24, 24)
-        folder_icon_label.setScaledContents(True)
-
-        # Use a standard folder icon from Qt
-        folder_icon = QIcon.fromTheme("folder", QtWidgets.QApplication.style().standardIcon(QtWidgets.QStyle.SP_DirIcon))
-        pixmap = folder_icon.pixmap(QSize(24, 24))
-        folder_icon_label.setPixmap(pixmap)
-
-        item_layout.addWidget(folder_icon_label)
-
-        # Folder name
-        name_label = QtWidgets.QLabel(folder_data.get('name', 'Unnamed Folder'))
-        font = name_label.font()
-        font.setBold(True)
-        name_label.setFont(font)
-        item_layout.addWidget(name_label)
-
-        # Add spacer
-        item_layout.addItem(QtWidgets.QSpacerItem(
-            40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
-
-        # Add buttons for bulk operations
-        button_layout = QtWidgets.QVBoxLayout()
-
-        # Add All as Tiling Service
-        btn_tiling_all = QtWidgets.QPushButton("Tiling All")
-        btn_tiling_all.setToolTip("Add all maps in this folder as tiling services")
-        btn_tiling_all.clicked.connect(lambda: self.on_tiling_all_clicked(folder_data['id']))
-        button_layout.addWidget(btn_tiling_all)
-
-        item_layout.addLayout(button_layout)
-
-        # Store folder_id in the frame for later reference
-        item_frame.setProperty("folder_id", folder_data['id'])
-
-        # Check if this is the current folder
-        if self.folder_history and folder_data['id'] == self.folder_history[-1]:
-            # Highlight the current folder
-            item_frame.setStyleSheet("background-color: #e0f0ff;")
-
-        # Make the entire frame clickable
-        item_frame.setCursor(QCursor(Qt.PointingHandCursor))
-        item_frame.mousePressEvent = lambda event: self.on_folder_clicked(folder_data['id'])
-
-        # Add to layout
-        self.list_layout.addWidget(item_frame)
+    # Folder item display and workspace selection are now handled by WorkspaceNavigationWidget
 
     def add_map_item(self, map_data):
         """Create a frame for each list item."""
         item_frame = QtWidgets.QFrame()
+        item_frame.setObjectName("map_item_frame")  # Set object name for styling
         item_frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
         item_frame.setFrameShadow(QtWidgets.QFrame.Raised)
         item_frame.setMinimumHeight(96)
@@ -440,13 +305,8 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
         for tag in map_data.get('tags'):
             tag_label = QtWidgets.QLabel(tag)
-            tag_label.setStyleSheet("""
-                background-color: #e0e0e0; 
-                border-radius: 4px; 
-                padding: 2px 6px;
-                color: #444444;
-                margin-right: 4px;
-            """)
+            # Use class property for styling with QSS
+            tag_label.setProperty("class", "tag_label")
             tags_layout.addWidget(tag_label)
 
         # Add stretch at the end to left-align tags
@@ -480,11 +340,13 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
         # Button 1 - Download
         btn_download = QtWidgets.QPushButton("Download")
+        # No need to set style as QPushButton styling is already in style.qss
         btn_download.clicked.connect(lambda: self.on_download_clicked(map_data))
         button_layout.addWidget(btn_download)
 
         # Button 2 - View Details
         btn_tiling = QtWidgets.QPushButton("Tiling Service")
+        # No need to set style as QPushButton styling is already in style.qss
         btn_tiling.clicked.connect(lambda: self.on_tiling_clicked(map_data))
         button_layout.addWidget(btn_tiling)
 
@@ -634,9 +496,14 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         progress.setMaximum(len(maps))
         progress.setValue(0)
 
+        # Create a dialog that uses the same style as MapHubBaseDialog
         progress_dialog = QtWidgets.QDialog(self)
         progress_dialog.setWindowTitle("Adding Tiling Services")
         progress_dialog.setMinimumWidth(300)
+
+        # Apply the same style as MapHubBaseDialog
+        if style:  # style is imported from MapHubBaseDialog
+            progress_dialog.setStyleSheet(style)
 
         layout = QVBoxLayout(progress_dialog)
         layout.addWidget(QLabel("Adding maps as tiling services..."))

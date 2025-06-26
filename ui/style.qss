@@ -125,6 +125,74 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     width: 0px;
 }
 
+/* Map cards and frames */
+QFrame#map_item_frame {
+    border: 1px solid #e1e7ef; /* --color-border */
+    border-radius: 4px;
+    background-color: #ffffff; /* --color-white */
+    padding: 5px;
+}
+
+/* Project navigation widget */
+#projectNavigationWidget {
+    background-color: transparent;
+}
+
+#navigationFrame {
+    background-color: #e4e7ec; /* --color-blue-light */
+    border: 1px solid #e1e7ef; /* --color-border */
+    border-radius: 4px;
+}
+
+#currentFolderLabel {
+    font-weight: bold;
+    color: #0e1016; /* --color-black */
+    font-size: 12px;
+}
+
+QFrame[objectName^="folderItem_"] {
+    border: 1px solid #e1e7ef; /* --color-border */
+    border-radius: 4px;
+    background-color: #ffffff; /* --color-white */
+}
+
+QLabel[objectName^="folderName_"] {
+    font-weight: bold;
+    color: #0e1016; /* --color-black */
+    font-size: 12px;
+}
+
+/* Use attribute selector for the selected property */
+QFrame[objectName^="folderItem_"][selected="true"] {
+    border: 1px solid #236ce1; /* --color-blue-primary */
+    border-radius: 4px;
+    background-color: #e4e7ec; /* --color-blue-light */
+}
+
+/* Tag styling */
+QLabel.tag_label {
+    background-color: #e4e7ec; /* --color-blue-light */
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: #0e1016; /* --color-black */
+    margin-right: 4px;
+}
+
+/* Progress Bar */
+QProgressBar {
+    border: 1px solid #e1e7ef; /* --color-border */
+    border-radius: 4px;
+    background-color: #ffffff; /* --color-white */
+    text-align: center;
+    padding: 1px;
+    height: 20px;
+}
+
+QProgressBar::chunk {
+    background-color: #236ce1; /* --color-blue-primary */
+    border-radius: 3px;
+}
+
 /* Message boxes */
 QMessageBox {
     background-color: #ffffff; /* --color-white */

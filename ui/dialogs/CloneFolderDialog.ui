@@ -20,6 +20,21 @@
    <string>MapHub: Clone Folder</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>6</number>
+   </property>
+   <property name="leftMargin">
+    <number>9</number>
+   </property>
+   <property name="topMargin">
+    <number>9</number>
+   </property>
+   <property name="rightMargin">
+    <number>9</number>
+   </property>
+   <property name="bottomMargin">
+    <number>9</number>
+   </property>
    <item>
     <widget class="QLabel" name="label_info">
      <property name="text">
@@ -32,34 +47,6 @@ This will download all maps in the folder and create a QGIS project.</string>
      <property name="wordWrap">
       <bool>true</bool>
      </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QTabWidget" name="tabWidget_workspace">
-     <property name="currentIndex">
-      <number>0</number>
-     </property>
-     <widget class="QWidget" name="tab_workspace">
-      <attribute name="title">
-       <string>Workspaces</string>
-      </attribute>
-      <layout class="QVBoxLayout" name="verticalLayout_workspace">
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_workspace">
-         <item>
-          <widget class="QLabel" name="label_workspace">
-           <property name="text">
-            <string>Select Workspace:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QComboBox" name="comboBox_workspace"/>
-         </item>
-        </layout>
-       </item>
-      </layout>
-     </widget>
     </widget>
    </item>
    <item>
