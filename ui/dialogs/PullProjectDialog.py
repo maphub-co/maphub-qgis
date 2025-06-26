@@ -4,18 +4,19 @@ import uuid
 from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal, Qt, QUrl
-from PyQt5.QtWidgets import QDialog, QLabel, QVBoxLayout, QProgressBar, QMessageBox
+from PyQt5.QtWidgets import QLabel, QVBoxLayout, QProgressBar, QMessageBox
 from PyQt5.QtGui import QDesktopServices
 from qgis.PyQt import uic, QtWidgets
 from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer
 
-from ..utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
+from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
+from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'PullProjectDialog.ui'))
 
-class PullProjectDialog(QDialog, FORM_CLASS):
+class PullProjectDialog(MapHubBaseDialog, FORM_CLASS):
     # Define signals
     pullCompleted = pyqtSignal(str)  # Signal emitted when pull is complete, passes project path
 
@@ -128,7 +129,7 @@ class PullProjectDialog(QDialog, FORM_CLASS):
         progress.setMaximum(100)
         progress.setValue(0)
 
-        progress_dialog = QDialog(self.parent)
+        progress_dialog = QtWidgets.QDialog(self.parent)
         progress_dialog.setWindowTitle("Pulling Project")
         progress_dialog.setMinimumWidth(300)
 

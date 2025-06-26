@@ -1,0 +1,62 @@
+QDialog {
+    background-color: #f5f5f5;
+}
+QLabel {
+    color: #333333;
+    font-size: 12px;
+}
+QLabel#label_title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2c3e50;
+    padding: 10px;
+}
+QLineEdit, QComboBox, QTextEdit, QSpinBox {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 8px;
+    background-color: white;
+    selection-background-color: #3498db;
+}
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QSpinBox:focus {
+    border: 1px solid #3498db;
+}
+QPushButton {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #2980b9;
+}
+QPushButton:pressed {
+    background-color: #1c6ea4;
+}
+QGroupBox {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    margin-top: 1ex;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 3px;
+}
+QCheckBox {
+    spacing: 5px;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+QRadioButton {
+    spacing: 5px;
+}
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+}

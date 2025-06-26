@@ -2,16 +2,17 @@
 
 import os
 from qgis.PyQt import uic
-from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal, QSettings
 from qgis.PyQt.QtWidgets import QLineEdit
+
+from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'ApiKeyDialog.ui'))
 
 
-class ApiKeyDialog(QtWidgets.QDialog, FORM_CLASS):
+class ApiKeyDialog(MapHubBaseDialog, FORM_CLASS):
     closingPlugin = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -48,7 +49,8 @@ class ApiKeyDialog(QtWidgets.QDialog, FORM_CLASS):
             self.accept()
         else:
             # Show an error message if API key is empty
-            QtWidgets.QMessageBox.warning(
+            from qgis.PyQt.QtWidgets import QMessageBox
+            QMessageBox.warning(
                 self,
                 "API Key Required",
                 "Please enter a valid API key to continue."

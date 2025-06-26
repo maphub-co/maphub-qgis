@@ -7,7 +7,7 @@ import tempfile
 
 from PyQt5 import QtGui, QtCore, QtWidgets, uic
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
-from PyQt5.QtWidgets import (QDialog, QLabel, QVBoxLayout, QHBoxLayout,
+from PyQt5.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout,
                              QWidget, QPushButton, QSizePolicy, QSpacerItem,
                              QMessageBox, QGroupBox, QProgressBar)
 from PyQt5.QtGui import QPixmap, QIcon, QCursor, QFont
@@ -15,7 +15,6 @@ from qgis.core import Qgis, QgsProject
 from qgis.utils import iface
 
 from qgis.PyQt import uic
-from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal, QSettings, Qt, QByteArray
 from qgis.PyQt.QtGui import QColor, QPixmap
 from qgis.PyQt.QtWidgets import QLineEdit, QFileDialog, QMessageBox
@@ -23,7 +22,8 @@ from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
-from ..utils import get_maphub_client, handled_exceptions, apply_style_to_layer
+from ...utils import get_maphub_client, handled_exceptions, apply_style_to_layer
+from .MapHubBaseDialog import MapHubBaseDialog
 
 
 class ThumbnailLoader(QThread):
@@ -42,10 +42,11 @@ class ThumbnailLoader(QThread):
 
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
-FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'GetMapDialog.ui'))
+FORM_CLASS, _ = uic.loadUiType(os.path.join(
+    os.path.dirname(__file__), 'GetMapDialog.ui'))
 
 
-class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
+class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
     closingPlugin = pyqtSignal()
 
     def __init__(self, iface, parent=None):
@@ -633,7 +634,7 @@ class GetMapDialog(QtWidgets.QDialog, FORM_CLASS):
         progress.setMaximum(len(maps))
         progress.setValue(0)
 
-        progress_dialog = QDialog(self)
+        progress_dialog = QtWidgets.QDialog(self)
         progress_dialog.setWindowTitle("Adding Tiling Services")
         progress_dialog.setMinimumWidth(300)
 

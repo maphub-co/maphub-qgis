@@ -9,7 +9,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from PyQt5.QtXml import QDomDocument
 
 from .maphub import MapHubClient
-from .ui.ApiKeyDialog import ApiKeyDialog
+from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
 from .maphub.exceptions import APIException
 
 

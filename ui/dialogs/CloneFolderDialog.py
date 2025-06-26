@@ -5,22 +5,23 @@ import shutil
 from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal, Qt
-from PyQt5.QtWidgets import (QDialog, QLabel, QVBoxLayout, QHBoxLayout, QProgressBar, 
+from PyQt5.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QProgressBar, 
                             QMessageBox, QPushButton, QSpacerItem, QSizePolicy, QFrame)
 from PyQt5.QtGui import QIcon, QCursor
 from qgis.PyQt import uic, QtWidgets
-from qgis.PyQt.QtWidgets import QDialog, QFileDialog
+from qgis.PyQt.QtWidgets import QFileDialog
 from qgis.core import (QgsCoordinateReferenceSystem, QgsProject, QgsVectorLayer, 
                       QgsRasterLayer, QgsMapLayer)
 
-from ..utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, place_layer_at_position
+from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, place_layer_at_position
+from .MapHubBaseDialog import MapHubBaseDialog
 from .CreateFolderDialog import CreateFolderDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'CloneFolderDialog.ui'))
 
-class CloneFolderDialog(QDialog, FORM_CLASS):
+class CloneFolderDialog(MapHubBaseDialog, FORM_CLASS):
     # Define signals
     cloneCompleted = pyqtSignal(str)  # Signal emitted when cloning is complete, passes project path
 
@@ -258,7 +259,7 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
         create_folder_dialog = CreateFolderDialog(self, workspace_id, parent_folder_id)
         result = create_folder_dialog.exec_()
 
-        if result == QDialog.Accepted and create_folder_dialog.folder:
+        if result == QtWidgets.QDialog.Accepted and create_folder_dialog.folder:
             # Refresh the current folder to show the new folder
             self.load_folder_contents(self.folder_history[-1])
 
@@ -338,7 +339,7 @@ class CloneFolderDialog(QDialog, FORM_CLASS):
         progress.setMaximum(100)
         progress.setValue(0)
 
-        progress_dialog = QDialog(self.parent)
+        progress_dialog = QtWidgets.QDialog(self.parent)
         progress_dialog.setWindowTitle("Cloning Folder")
         progress_dialog.setMinimumWidth(300)
 

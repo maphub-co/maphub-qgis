@@ -12,13 +12,14 @@ from qgis.PyQt.QtGui import QIcon, QCursor
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
-from ..utils import get_maphub_client, handled_exceptions, show_error_dialog, get_layer_styles_as_json
+from ...utils import get_maphub_client, handled_exceptions, show_error_dialog, get_layer_styles_as_json
+from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'UploadMapDialog.ui'))
 
 
-class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
+class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
     closingPlugin = pyqtSignal()
 
     def __init__(self, iface, parent=None):
@@ -109,14 +110,15 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Connect the signal
         self.comboBox_layer.currentIndexChanged.connect(update_map_name)
 
-        # Set initial value if there's a layer selected
-        update_map_name(0)
+        # Initialize map name with first layer
+        if self.comboBox_layer.count() > 0:
+            update_map_name(0)
 
     def _populate_workspaces_combobox(self):
         """Populate the workspace combobox with available workspaces."""
         self.comboBox_workspace.clear()
 
-        # Get workspaces
+        # Get the workspaces from MapHub
         client = get_maphub_client()
         workspaces = client.workspace.get_workspaces()
 
@@ -134,7 +136,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         root_folder = get_maphub_client().folder.get_root_folder(workspace_id)
         folder_id = root_folder["folder"]["id"]
 
-        # Reset folder history
+        # Reset workspace history
         self.folder_history = [folder_id]
         self.selected_folder_id = folder_id
 
@@ -149,7 +151,7 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
                 widget.deleteLater()
 
     def load_folder_contents(self, folder_id):
-        """Load folders for a folder"""
+        """Load subfolders for a folder"""
         # Clear any existing items
         self.clear_folder_layout()
 
@@ -165,9 +167,6 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         for folder in child_folders:
             self.add_folder_item(folder)
 
-        # Update the selected folder ID
-        self.selected_folder_id = folder_id
-
     def add_navigation_controls(self):
         """Add navigation controls for folder browsing"""
         nav_frame = QtWidgets.QFrame()
@@ -176,48 +175,46 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         nav_layout.setContentsMargins(5, 5, 5, 5)
         nav_layout.setSpacing(5)
 
-        # Back button
-        back_button = QtWidgets.QPushButton("← Back")
-        back_button.setMaximumWidth(80)
-        back_button.clicked.connect(self.navigate_back)
-        back_button.setEnabled(len(self.folder_history) > 1)
-        nav_layout.addWidget(back_button)
+        # Add "Back" button if we have history
+        if len(self.folder_history) > 1:
+            btn_back = QtWidgets.QPushButton("← Back")
+            btn_back.setToolTip("Go back to previous folder")
+            btn_back.clicked.connect(self.navigate_back)
+            nav_layout.addWidget(btn_back)
 
-        # Current folder path
+        # Add current path display
         if self.folder_history:
-            # Get the current folder details
-            folder_id = self.folder_history[-1]
-            folder_details = get_maphub_client().folder.get_folder(folder_id)
-            folder_name = folder_details["folder"].get("name", "Unknown Folder")
+            current_folder_id = self.folder_history[-1]
+            folder_details = get_maphub_client().folder.get_folder(current_folder_id)
+            folder_name = folder_details.get("folder", {}).get("name", "Unknown Folder")
 
-            # Create a label for the current folder
-            current_folder_label = QtWidgets.QLabel(f"Current folder: {folder_name}")
-            current_folder_label.setStyleSheet("font-weight: bold;")
-            nav_layout.addWidget(current_folder_label)
+            path_label = QtWidgets.QLabel(f"Current folder: {folder_name}")
+            path_label.setStyleSheet("font-weight: bold;")
+            nav_layout.addWidget(path_label)
 
         # Add spacer
         nav_layout.addItem(QtWidgets.QSpacerItem(
             40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum))
 
-        # Add to layout before the list items
+        # Add to layout
         self.folder_layout.addWidget(nav_frame)
 
     def navigate_back(self):
-        """Navigate back to the previous folder"""
+        """Handle click on the back button"""
         if len(self.folder_history) > 1:
             # Remove the current folder from history
             self.folder_history.pop()
 
-            # Get the previous folder
+            # Load the previous folder
             previous_folder_id = self.folder_history[-1]
-
-            # Load the previous folder without adding to history
+            self.selected_folder_id = previous_folder_id
             self.load_folder_contents(previous_folder_id)
 
     def on_folder_clicked(self, folder_id):
-        """Handle click on a folder item"""
+        """Handle click on a folder item to navigate into it"""
         # Add the folder to the navigation history
         self.folder_history.append(folder_id)
+        self.selected_folder_id = folder_id
 
         # Load the contents of the clicked folder
         self.load_folder_contents(folder_id)
@@ -235,15 +232,9 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         item_layout.setSpacing(5)
 
         # Add folder icon
-        folder_icon_label = QtWidgets.QLabel()
-        folder_icon_label.setFixedSize(24, 24)
-        folder_icon_label.setScaledContents(True)
-
-        # Use a standard folder icon from Qt
         folder_icon = QIcon.fromTheme("folder", QtWidgets.QApplication.style().standardIcon(QtWidgets.QStyle.SP_DirIcon))
-        pixmap = folder_icon.pixmap(QSize(24, 24))
-        folder_icon_label.setPixmap(pixmap)
-
+        folder_icon_label = QtWidgets.QLabel()
+        folder_icon_label.setPixmap(folder_icon.pixmap(24, 24))
         item_layout.addWidget(folder_icon_label)
 
         # Folder name
@@ -260,12 +251,12 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         # Store folder_id in the frame for later reference
         item_frame.setProperty("folder_id", folder_data['id'])
 
-        # Check if this is the current folder
-        if self.folder_history and folder_data['id'] == self.folder_history[-1]:
-            # Highlight the current folder
+        # Check if this is the selected folder
+        if self.selected_folder_id and folder_data['id'] == self.selected_folder_id:
+            # Highlight the selected folder
             item_frame.setStyleSheet("background-color: #e0f0ff;")
 
-        # Make the entire frame clickable
+        # Make the entire frame clickable to navigate into the folder
         item_frame.setCursor(QCursor(Qt.PointingHandCursor))
         item_frame.mousePressEvent = lambda event: self.on_folder_clicked(folder_data['id'])
 
@@ -277,68 +268,97 @@ class UploadMapDialog(QtWidgets.QDialog, FORM_CLASS):
         self.closingPlugin.emit()
         event.accept()
 
-    # @handled_exceptions
+    @handled_exceptions
     def upload_map(self):
-        client = get_maphub_client()
+        """Upload the selected layer to MapHub."""
+        # Get the selected layer
+        layer = self.comboBox_layer.currentData()
+        if not layer:
+            raise Exception("No layer selected.")
 
-        # Get selected values
-        selected_name = self.lineEdit_map_name.text()
-        if not selected_name:
-            return show_error_dialog("No name selected")
+        # Get the map name
+        map_name = self.lineEdit_map_name.text().strip()
+        if not map_name:
+            raise Exception("Map name is required.")
 
-        selected_layer = self.comboBox_layer.currentData()
-        if selected_layer is None:
-            return show_error_dialog("No layer selected")
-        file_path = selected_layer.dataProvider().dataSourceUri().split('|')[0]
+        # Get the selected folder
+        if not self.selected_folder_id:
+            raise Exception("No folder selected.")
 
-        if self.selected_folder_id is None:
-            return show_error_dialog("No destination folder selected. Please select a folder.")
+        # Get the map description
+        map_description = self.textEdit_description.toPlainText().strip()
 
-        selected_public = self.checkBox_public.isChecked()
+        # Get the map tags
+        map_tags = []
+        if self.lineEdit_tags.text().strip():
+            map_tags = [tag.strip() for tag in self.lineEdit_tags.text().split(',') if tag.strip()]
 
-        # Extract style information
-        try:
-            visuals = get_layer_styles_as_json(selected_layer, {})
-        except Exception as e:
-            # If style extraction fails, log the error but continue with upload
-            print(f"Warning: Failed to extract layer style: {str(e)}")
-            show_error_dialog(f"Warning: Failed to extract layer style: {str(e)}\nThe map will be uploaded without style information.", "Style Export Warning")
-            visuals = None
+        # Get the map privacy setting
+        is_public = self.checkBox_public.isChecked()
 
-        if file_path.lower().endswith('.shp') or file_path.lower().endswith('.shx') or file_path.lower().endswith('.dbf'):  # Shapefiles
-            base_dir = os.path.dirname(file_path)
-            file_name = os.path.splitext(os.path.basename(file_path))[0]
+        # Create a temporary directory to store the files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Get the layer file path
+            layer_path = layer.source()
+            if '|' in layer_path:  # Handle layers with query parameters
+                layer_path = layer_path.split('|')[0]
 
-            # Create temporary zip file
-            temp_zip = tempfile.mktemp(suffix='.zip')
+            # Determine the file extension based on layer type
+            if isinstance(layer, QgsVectorLayer):
+                file_extension = os.path.splitext(layer_path)[1]
+                if not file_extension:
+                    file_extension = '.gpkg'  # Default to GeoPackage
+            elif isinstance(layer, QgsRasterLayer):
+                file_extension = os.path.splitext(layer_path)[1]
+                if not file_extension:
+                    file_extension = '.tif'  # Default to GeoTIFF
+            else:
+                raise Exception("Unsupported layer type.")
 
-            with zipfile.ZipFile(temp_zip, 'w') as zipf:
-                # Find all files with same basename but different extensions
-                pattern = os.path.join(base_dir, file_name + '.*')
-                shapefile_parts = glob.glob(pattern)
+            # Create a temporary file path
+            temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
 
-                for part_file in shapefile_parts:
-                    # Add file to zip with just the filename (not full path)
-                    zipf.write(part_file, os.path.basename(part_file))
+            # Copy the layer file to the temporary directory
+            if os.path.exists(layer_path):
+                # For file-based layers, copy the file
+                with open(layer_path, 'rb') as src_file:
+                    with open(temp_file, 'wb') as dst_file:
+                        dst_file.write(src_file.read())
 
-            # Upload layer to MapHub with style information
-            version = client.maps.upload_map(
-                map_name=selected_name,
-                folder_id=self.selected_folder_id,
-                public=selected_public,
-                path=temp_zip,
+                # For shapefiles, copy all related files
+                if file_extension.lower() == '.shp':
+                    base_name = os.path.splitext(layer_path)[0]
+                    for ext in ['.dbf', '.shx', '.prj', '.qpj', '.cpg']:
+                        related_file = f"{base_name}{ext}"
+                        if os.path.exists(related_file):
+                            with open(related_file, 'rb') as src_file:
+                                with open(os.path.join(temp_dir, f"{map_name}{ext}"), 'wb') as dst_file:
+                                    dst_file.write(src_file.read())
+            else:
+                # For memory layers or other non-file layers, save to a new file
+                raise Exception("Layer is not file-based. Please save it to a file first.")
+
+            # Get the layer style
+            style_json = get_layer_styles_as_json(layer, {})
+
+            # Upload the map to MapHub
+            client = get_maphub_client()
+            result = client.maps.upload_map(
+                temp_file,
+                self.selected_folder_id,
+                map_name,
+                description=map_description,
+                tags=map_tags,
+                is_public=is_public,
+                visuals=style_json
             )
 
-        else:
-            # Upload layer to MapHub with style information
-            version = client.maps.upload_map(
-                map_name=selected_name,
-                folder_id=self.selected_folder_id,
-                public=selected_public,
-                path=file_path,
+            # Show success message
+            QtWidgets.QMessageBox.information(
+                self,
+                "Upload Successful",
+                f"Map '{map_name}' has been uploaded to MapHub."
             )
 
-        if visuals is not None:
-            client.maps.set_visuals(version["map_id"], visuals)
-
-        return None
+            # Close the dialog
+            self.accept()

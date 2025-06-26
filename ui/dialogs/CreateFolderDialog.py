@@ -2,17 +2,18 @@
 
 import os
 from qgis.PyQt import uic
-from qgis.PyQt import QtWidgets
 from qgis.PyQt.QtCore import pyqtSignal, QSettings
 from qgis.PyQt.QtWidgets import QLineEdit, QMessageBox
 
-from ..utils import handled_exceptions, get_maphub_client
+from ...utils import handled_exceptions, get_maphub_client
+from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
-FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'CreateFolderDialog.ui'))
+FORM_CLASS, _ = uic.loadUiType(os.path.join(
+    os.path.dirname(__file__), 'CreateFolderDialog.ui'))
 
 
-class CreateFolderDialog(QtWidgets.QDialog, FORM_CLASS):
+class CreateFolderDialog(MapHubBaseDialog, FORM_CLASS):
     closingPlugin = pyqtSignal()
 
     def __init__(self, parent=None, workspace_id=None, parent_folder_id=None):

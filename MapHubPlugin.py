@@ -11,14 +11,14 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
-from .ui.CloneFolderDialog import CloneFolderDialog
-from .ui.GetMapDialog import GetMapDialog
-from .ui.CreateFolderDialog import CreateFolderDialog
+from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
+from .ui.dialogs.GetMapDialog import GetMapDialog
+from .ui.dialogs.CreateFolderDialog import CreateFolderDialog
 from .utils import handled_exceptions, show_error_dialog
-from .ui.ApiKeyDialog import ApiKeyDialog
-from .ui.UploadMapDialog import UploadMapDialog
-from .ui.PullProjectDialog import PullProjectDialog
-from .ui.PushProjectDialog import PushProjectDialog
+from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
+from .ui.dialogs.UploadMapDialog import UploadMapDialog
+from .ui.dialogs.PullProjectDialog import PullProjectDialog
+from .ui.dialogs.PushProjectDialog import PushProjectDialog
 
 
 
