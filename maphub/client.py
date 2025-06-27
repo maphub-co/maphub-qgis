@@ -666,64 +666,61 @@ class MapHubClient:
             maphub_dir: Path to the .maphub directory
             file_format: Defines the file format to be used for downloading the map
         """
-        try:
-            # Get the latest map info
-            map_data = self.maps.get_map(map_id)['map']
+        # Get the latest map info
+        map_data = self.maps.get_map(map_id)['map']
 
-            # Check if the version has changed
-            if map_data["latest_version_id"] != map_metadata["version_id"]:
-                print(f"Pulling updates for map: {map_data.get('name', 'Unnamed Map')}")
+        # Check if the version has changed
+        if map_data["latest_version_id"] != map_metadata["version_id"]:
+            print(f"Pulling updates for map: {map_data.get('name', 'Unnamed Map')}")
 
-                latest_version = self.versions.get_version(map_data["latest_version_id"])
-                if latest_version["state"]["status"] != "completed":
-                    raise Exception(f"New Version {map_data['latest_version_id']} is not ready yet.")
+            latest_version = self.versions.get_version(map_data["latest_version_id"])
+            if latest_version["state"]["status"] != "completed":
+                raise Exception(f"New Version {map_data['latest_version_id']} is not ready yet.")
 
-                # Get the map type
-                map_type = map_data.get("type", "unknown")
+            # Get the map type
+            map_type = map_data.get("type", "unknown")
 
-                # Determine the file format to use
-                format_to_use = file_format
+            # Determine the file format to use
+            format_to_use = file_format
 
-                # If no specific format is provided, check if we have type-specific formats in config
-                if not format_to_use:
-                    try:
-                        # Load config to get type-specific formats
-                        with open(maphub_dir / "config.json", "r") as f:
-                            config = json.load(f)
+            # If no specific format is provided, check if we have type-specific formats in config
+            if not format_to_use:
+                try:
+                    # Load config to get type-specific formats
+                    with open(maphub_dir / "config.json", "r") as f:
+                        config = json.load(f)
 
-                        if "file_formats" in config:
-                            # Use the format for this map type
-                            if map_type == "raster" and "raster" in config["file_formats"]:
-                                format_to_use = config["file_formats"]["raster"]
-                            elif map_type == "vector" and "vector" in config["file_formats"]:
-                                format_to_use = config["file_formats"]["vector"]
-                    except Exception as config_error:
-                        print(f"Warning: Could not read config file: {config_error}")
+                    if "file_formats" in config:
+                        # Use the format for this map type
+                        if map_type == "raster" and "raster" in config["file_formats"]:
+                            format_to_use = config["file_formats"]["raster"]
+                        elif map_type == "vector" and "vector" in config["file_formats"]:
+                            format_to_use = config["file_formats"]["vector"]
+                except Exception as config_error:
+                    print(f"Warning: Could not read config file: {config_error}")
 
-                # Get the current map path
-                map_path = root_dir / map_metadata["path"]
+            # Get the current map path
+            map_path = root_dir / map_metadata["path"]
 
-                # Get the new file path for the map
-                file_path = self._get_file_path_for_map(map_data, map_path.parent, format_to_use)
+            # Get the new file path for the map
+            file_path = self._get_file_path_for_map(map_data, map_path.parent, format_to_use)
 
-                # Download the map
-                self.maps.download_map(map_id, file_path, format_to_use)
+            # Download the map
+            self.maps.download_map(map_id, file_path, format_to_use)
 
-                # Update metadata
-                map_metadata["version_id"] = map_data["latest_version_id"]
-                map_metadata["checksum"] = map_data.get("checksum", self._calculate_checksum(file_path))
-                map_metadata["last_modified"] = map_data.get("updated_at")
-                map_metadata["path"] = str(Path(file_path).relative_to(root_dir))
-                map_metadata["type"] = map_data.get("type", "unknown")
+            # Update metadata
+            map_metadata["version_id"] = map_data["latest_version_id"]
+            map_metadata["checksum"] = map_data.get("checksum", self._calculate_checksum(file_path))
+            map_metadata["last_modified"] = map_data.get("updated_at")
+            map_metadata["path"] = str(Path(file_path).relative_to(root_dir))
+            map_metadata["type"] = map_data.get("type", "unknown")
 
-                with open(maphub_dir / "maps" / f"{map_id}.json", "w") as f:
-                    json.dump(map_metadata, f, indent=2)
+            with open(maphub_dir / "maps" / f"{map_id}.json", "w") as f:
+                json.dump(map_metadata, f, indent=2)
 
-                print(f"Successfully updated map: {map_data.get('name', 'Unnamed Map')}")
-            else:
-                print(f"Map is already up to date: {map_data.get('name', 'Unnamed Map')}")
-        except Exception as e:
-            print(f"Error pulling map {map_id}: {e}")
+            print(f"Successfully updated map: {map_data.get('name', 'Unnamed Map')}")
+        else:
+            print(f"Map is already up to date: {map_data.get('name', 'Unnamed Map')}")
 
     def push_map(self, map_id: uuid.UUID, map_metadata: Dict[str, Any], root_dir: Path, maphub_dir: Path,
                  version_description: Optional[str] = None) -> None:
@@ -790,6 +787,9 @@ class MapHubClient:
         Returns:
             Path to the cloned folder
         """
+        # List to collect all clone failures
+        clone_failures = []
+
         folder_info = self.folder.get_folder(folder_id)
         folder_name = folder_info.get("folder", {}).get("name", "root")
 
@@ -812,21 +812,36 @@ class MapHubClient:
                 map_id = uuid.UUID(map_data["id"])
                 self.clone_map(map_id, folder_path, maphub_dir, file_format)
                 map_ids.append(str(map_id))
-            except APIException as e:
-                print(f"Skipping {map_data.get('id')}, Error: {e.status_code}, {e.message}")
+            except Exception as e:
+                error_msg = f"Error cloning map {map_data.get('id')}: {e}"
+                print(error_msg)
+                clone_failures.append(error_msg)
                 continue
 
         # Recursively clone subfolders
         subfolders = folder_info["child_folders"]
 
         for subfolder in subfolders:
-            subfolder_id = uuid.UUID(subfolder["id"])
-            subfolder_ids.append(str(subfolder_id))
-            self.clone_folder(subfolder_id, folder_path, output_dir, maphub_dir, file_format)
+            try:
+                subfolder_id = uuid.UUID(subfolder["id"])
+                subfolder_ids.append(str(subfolder_id))
+                self.clone_folder(subfolder_id, folder_path, output_dir, maphub_dir, file_format)
+            except MapHubException as e:
+                # Collect errors from subfolder clones
+                clone_failures.append(str(e))
+            except Exception as e:
+                error_msg = f"Error cloning subfolder {subfolder.get('id')}: {e}"
+                print(error_msg)
+                clone_failures.append(error_msg)
 
         # Save folder metadata if maphub_dir is provided
         parent_id = folder_info.get("folder", {}).get("parent_folder_id")
         self._save_folder_metadata(folder_id, folder_name, parent_id, map_ids, subfolder_ids, maphub_dir)
+
+        # If there were any failures, raise an exception with all the details
+        if clone_failures:
+            failure_details = "\n".join(clone_failures)
+            raise MapHubException(f"The following errors occurred while cloning folder {folder_id}:\n{failure_details}")
 
         return folder_path
 
@@ -842,22 +857,24 @@ class MapHubClient:
             maphub_dir: Path to the .maphub directory
             file_format: Defines the file format to be used for downloading the maps
         """
-        try:
-            # Load folder metadata
-            with open(maphub_dir / "folders" / f"{folder_id}.json", "r") as f:
-                folder_metadata = json.load(f)
+        pull_failures = []
 
-            # Get folder info from server
-            folder_info = self.folder.get_folder(folder_id)
-            folder_name = folder_info.get("folder", {}).get("name", "root")
+        # Load folder metadata
+        with open(maphub_dir / "folders" / f"{folder_id}.json", "r") as f:
+            folder_metadata = json.load(f)
 
-            print(f"Pulling updates for folder: {folder_name}")
+        # Get folder info from server
+        folder_info = self.folder.get_folder(folder_id)
+        folder_name = folder_info.get("folder", {}).get("name", "root")
 
-            # Pull maps in this folder
-            maps = folder_info["map_infos"]
-            for map_data in maps:
-                map_id = uuid.UUID(map_data["id"])
+        print(f"Pulling updates for folder: {folder_name}")
 
+        # Pull maps in this folder
+        maps = folder_info["map_infos"]
+        for map_data in maps:
+            map_id = uuid.UUID(map_data["id"])
+
+            try:
                 # Check if we have metadata for this map
                 map_file = maphub_dir / "maps" / f"{map_id}.json"
                 if map_file.exists():
@@ -865,7 +882,6 @@ class MapHubClient:
                         map_metadata = json.load(f)
                     self.pull_map(map_id, map_metadata, root_dir, maphub_dir, file_format)
                 else:
-                    try:
                         # New map, clone it
                         print(f"  New map found: {map_data.get('name', 'Unnamed Map')}")
                         map_id = uuid.UUID(map_data["id"])
@@ -874,16 +890,18 @@ class MapHubClient:
                         # Add to folder metadata
                         if str(map_id) not in folder_metadata["maps"]:
                             folder_metadata["maps"].append(str(map_id))
-                    except APIException as e:
-                        print(f"Skipping {map_data.get('id')}, Error: {e.status_code}, {e.message}")
-                        continue
+            except Exception as e:
+                error_msg = f"Error pulling map {map_id}: {e}"
+                print(error_msg)
+                pull_failures.append(error_msg)
 
-            # Pull subfolders
-            subfolders = folder_info["child_folders"]
-            for subfolder in subfolders:
-                subfolder_id = uuid.UUID(subfolder["id"])
-                subfolder_name = subfolder.get("name", "unnamed")
+        # Pull subfolders
+        subfolders = folder_info["child_folders"]
+        for subfolder in subfolders:
+            subfolder_id = uuid.UUID(subfolder["id"])
+            subfolder_name = subfolder.get("name", "unnamed")
 
+            try:
                 # Check if we have metadata for this subfolder
                 subfolder_file = maphub_dir / "folders" / f"{subfolder_id}.json"
                 if subfolder_file.exists():
@@ -898,15 +916,20 @@ class MapHubClient:
                     # Add to folder metadata
                     if str(subfolder_id) not in folder_metadata["subfolders"]:
                         folder_metadata["subfolders"].append(str(subfolder_id))
+            except Exception as e:
+                # Collect error but continue with other maps
+                error_msg = f"Error pulling sub folder {subfolder_id}: {e}"
+                print(error_msg)
+                pull_failures.append(error_msg)
 
-            # Update folder metadata
-            with open(maphub_dir / "folders" / f"{folder_id}.json", "w") as f:
-                json.dump(folder_metadata, f, indent=2)
+        # Update folder metadata
+        with open(maphub_dir / "folders" / f"{folder_id}.json", "w") as f:
+            json.dump(folder_metadata, f, indent=2)
 
-        except Exception as e:
-            print(f"Error pulling folder {folder_id}: {e}")
-            import traceback
-            traceback.print_exc()
+        if pull_failures:
+            failure_details = "\n".join(pull_failures)
+
+            raise MapHubException(f"The following errors occurred while pulling folder {folder_id}:\n{failure_details}")
 
     def push_folder(self, folder_id: uuid.UUID, local_path: Path, root_dir: Path, maphub_dir: Path,
                     version_description: Optional[str] = None) -> None:
@@ -1049,11 +1072,15 @@ class MapHubClient:
 
             print(f"Successfully cloned folder structure to {result_path}")
             return result_path
+        except MapHubException as e:
+            # This will already contain the consolidated error details from clone_folder
+            print(f"Error: {e}")
+            raise
         except Exception as e:
             print(f"Error: Failed to clone folder with ID {folder_id}: {e}")
             import traceback
             traceback.print_exc()
-            return None
+            raise
 
     def pull(self, root_dir: Path, file_format: str = None) -> None:
         """
