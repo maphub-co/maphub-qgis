@@ -4,12 +4,13 @@ from typing import List, Dict, Any, Optional, Callable
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QByteArray
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, 
                             QPushButton, QLabel, QSpacerItem, QSizePolicy,
-                            QComboBox, QApplication, QDialog, QFileDialog, QMessageBox)
+                            QComboBox, QApplication, QDialog, QFileDialog, QMessageBox,
+                            QProgressBar)
 from PyQt5.QtGui import QIcon, QCursor, QPixmap, QColor, QFont
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
-from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions
+from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
 from ..dialogs.MapHubBaseDialog import style
 
 
@@ -54,7 +55,6 @@ class ProjectNavigationWidget(QWidget):
         self.selected_folder_id: Optional[str] = None
         self.custom_button_config: Optional[Dict[str, Any]] = None
         self.folder_select_mode: bool = folder_select_mode
-        self.add_select_button: bool = folder_select_mode
         self.thumb_loaders = []
 
         # Set widget styling
@@ -81,7 +81,7 @@ class ProjectNavigationWidget(QWidget):
 
         self.main_layout.addLayout(self.list_layout)
 
-    def set_workspace(self, workspace_id: str, add_custom_button: Optional[Dict[str, Any]] = None):
+    def set_workspace(self, workspace_id: str):
         """
         Set the current workspace and load its root folder
 
@@ -94,9 +94,6 @@ class ProjectNavigationWidget(QWidget):
                     'callback': Callable[[str], None]
                 }
         """
-        # Store the custom button configuration
-        self.custom_button_config = add_custom_button
-
         # Get the root folder for the workspace
         root_folder = get_maphub_client().folder.get_root_folder(workspace_id)
         folder_id = root_folder["folder"]["id"]
@@ -127,7 +124,7 @@ class ProjectNavigationWidget(QWidget):
 
         # Display child folders
         for folder in child_folders:
-            self.add_folder_item(folder, self.add_select_button, self.custom_button_config)
+            self.add_folder_item(folder)
 
         # If not in folder select mode, also display maps
         if not self.folder_select_mode:
@@ -183,9 +180,7 @@ class ProjectNavigationWidget(QWidget):
         # Add to layout
         self.list_layout.addWidget(nav_frame)
 
-    def add_folder_item(self, folder_data: Dict[str, Any], 
-                        add_select_button: bool = True,
-                        add_custom_button: Optional[Dict[str, Any]] = None):
+    def add_folder_item(self, folder_data: Dict[str, Any]):
         """
         Create a frame for each folder item
 
@@ -234,23 +229,19 @@ class ProjectNavigationWidget(QWidget):
         item_layout.addItem(QSpacerItem(
             40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
-        # Add custom button if provided
-        if add_custom_button:
-            btn_custom = QPushButton(add_custom_button.get('text', 'Custom'))
-            btn_custom.setObjectName(f"customButton_{folder_id}")
-            btn_custom.setToolTip(add_custom_button.get('tooltip', ''))
-            callback = add_custom_button.get('callback')
-            if callback:
-                btn_custom.clicked.connect(lambda: callback(folder_data['id']))
-            item_layout.addWidget(btn_custom)
-
-        # Add "Select" button if requested
-        if add_select_button:
+        # Add "Select" button if in folder select mode, otherwise add "Tiling All" button
+        if self.folder_select_mode:
             btn_select = QPushButton("Select")
             btn_select.setObjectName(f"selectButton_{folder_id}")
             btn_select.setToolTip("Select this folder")
             btn_select.clicked.connect(lambda: self.on_folder_selected(folder_data['id']))
             item_layout.addWidget(btn_select)
+        else:
+            btn_tiling_all = QPushButton("Tiling All")
+            btn_tiling_all.setObjectName(f"tilingAllButton_{folder_id}")
+            btn_tiling_all.setToolTip("Add all maps in this folder as tiling services")
+            btn_tiling_all.clicked.connect(lambda: self.on_tiling_all_clicked(folder_data['id']))
+            item_layout.addWidget(btn_tiling_all)
 
         # Store folder_id in the frame for later reference
         item_frame.setProperty("folder_id", folder_data['id'])
@@ -329,7 +320,7 @@ class ProjectNavigationWidget(QWidget):
         item_frame.setObjectName("map_item_frame")  # Set object name for styling
         item_frame.setFrameShape(QFrame.StyledPanel)
         item_frame.setFrameShadow(QFrame.Raised)
-        item_frame.setMinimumHeight(96)
+        item_frame.setMinimumHeight(120)
 
         # Create layout for the item
         item_layout = QHBoxLayout(item_frame)
@@ -459,7 +450,6 @@ class ProjectNavigationWidget(QWidget):
         # Add layer based on map type
         if map_data.get('type') == 'vector':
             # Add as vector tile layer
-            from qgis.core import QgsVectorTileLayer
             vector_tile_layer_string = f"type=xyz&url={tiler_url}&zmin={layer_info.get('min_zoom', 0)}&zmax={layer_info.get('max_zoom', 15)}"
             vector_layer = QgsVectorTileLayer(vector_tile_layer_string, layer_name)
             if vector_layer.isValid():
@@ -471,7 +461,6 @@ class ProjectNavigationWidget(QWidget):
                 iface.messageBar().pushWarning("Warning", f"Could not add vector tile layer from URL: {tiler_url}")
         elif map_data.get('type') == 'raster':
             # Add as raster tile layer
-            from qgis.core import QgsRasterLayer
             uri = f"type=xyz&url={tiler_url.replace('&', '%26')}"
             raster_layer = QgsRasterLayer(uri, layer_name, "wms")
             if raster_layer.isValid():
@@ -561,3 +550,93 @@ class ProjectNavigationWidget(QWidget):
         if self.folder_history:
             return self.folder_history[-1]
         return None
+
+    @handled_exceptions
+    def on_tiling_all_clicked(self, folder_id):
+        """Add all maps in a folder as tiling services"""
+        print(f"Adding all maps in folder {folder_id} as tiling services")
+
+        # Get all maps in the folder
+        client = get_maphub_client()
+        maps = client.folder.get_folder_maps(folder_id)
+
+        if not maps:
+            QMessageBox.information(
+                self,
+                "No Maps Found",
+                "There are no maps in this folder to add as tiling services."
+            )
+            return
+
+        # Create progress dialog
+        progress = QProgressBar()
+        progress.setMinimum(0)
+        progress.setMaximum(len(maps))
+        progress.setValue(0)
+
+        # Create a dialog that uses the same style as MapHubBaseDialog
+        progress_dialog = QDialog(self)
+        progress_dialog.setWindowTitle("Adding Tiling Services")
+        progress_dialog.setMinimumWidth(300)
+
+        # Apply the same style as MapHubBaseDialog
+        if style:  # style is imported from MapHubBaseDialog
+            progress_dialog.setStyleSheet(style)
+
+        layout = QVBoxLayout(progress_dialog)
+        layout.addWidget(QLabel("Adding maps as tiling services..."))
+        layout.addWidget(progress)
+
+        progress_dialog.show()
+
+        # Sort maps based on order in visuals if available
+        def get_order(map_data: dict):
+            return map_data.get('visuals', {}).get('layer_order', (float('inf'),))
+        maps.sort(key=get_order)
+
+        # Add each map as a tiling service
+        success_count = 0
+        errors = []
+        project = QgsProject.instance()
+        for i, map_data in enumerate(maps):
+            try:
+                # Get layer info
+                layer_info = client.maps.get_layer_info(map_data['id'])
+                tiler_url = layer_info['tiling_url']
+                layer_name = map_data.get('name', f"Tiled Map {map_data['id']}")
+
+                # Add layer based on map type
+                if map_data.get('type') == 'vector':
+                    # Add as vector tile layer
+                    vector_tile_layer_string = f"type=xyz&url={tiler_url}&zmin={layer_info.get('min_zoom', 0)}&zmax={layer_info.get('max_zoom', 15)}"
+                    vector_layer = QgsVectorTileLayer(vector_tile_layer_string, layer_name)
+                    if vector_layer.isValid():
+                        place_layer_at_position(project, vector_layer, map_data.get('visuals', {}).get('layer_order'))
+                        if 'visuals' in map_data and map_data['visuals']:
+                            apply_style_to_layer(vector_layer, map_data['visuals'], tiling=True)
+                        success_count += 1
+                elif map_data.get('type') == 'raster':
+                    uri = f"type=xyz&url={tiler_url.replace('&', '%26')}"
+                    raster_layer = QgsRasterLayer(uri, layer_name, "wms")
+                    if raster_layer.isValid():
+                        place_layer_at_position(project, raster_layer, map_data.get('visuals', {}).get('layer_order'))
+                        if 'visuals' in map_data and map_data['visuals']:
+                            apply_style_to_layer(raster_layer, map_data['visuals'])
+                        success_count += 1
+
+                # Update progress
+                progress.setValue(i + 1)
+                QApplication.processEvents()
+
+            except Exception as e:
+                errors.append(f"Error for map {map_data.get('name')} ({map_data.get('id')}): {e}")
+
+        # Close progress dialog
+        progress_dialog.close()
+
+        # Show completion message
+        QMessageBox.information(
+            self,
+            "Tiling Services Added",
+            f"Successfully added {success_count} out of {len(maps)} maps as tiling services." + ("\n\nErrors:\n" + "\n".join(errors)) if errors else ""
+        )

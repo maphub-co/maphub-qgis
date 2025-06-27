@@ -28,25 +28,23 @@ class WorkspaceNavigationWidget(QWidget):
     folder_clicked = pyqtSignal(str)
     folder_selected = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, folder_select_mode=True):
         super(WorkspaceNavigationWidget, self).__init__(parent)
 
         # Initialize state
         self.selected_workspace_id: Optional[str] = None
-        self.custom_button_config: Optional[Dict[str, Any]] = None
+        self.folder_select_mode: bool = folder_select_mode
 
         # Set up UI
         self.setup_ui()
-
-        # Populate workspaces
-        self._populate_workspaces_combobox()
 
         # Connect signals
         self.comboBox_workspace.currentIndexChanged.connect(self.on_workspace_selected)
         self.project_nav_widget.folder_clicked.connect(self.on_folder_clicked)
         self.project_nav_widget.folder_selected.connect(self.on_folder_selected)
 
-        self.on_workspace_selected(0)
+        # Populate workspaces
+        self._populate_workspaces_combobox()
 
     def setup_ui(self):
         """Set up the widget UI"""
@@ -78,7 +76,7 @@ class WorkspaceNavigationWidget(QWidget):
         self.main_layout.addWidget(separator)
 
         # Create project navigation widget
-        self.project_nav_widget = ProjectNavigationWidget(self)
+        self.project_nav_widget = ProjectNavigationWidget(self, self.folder_select_mode)
         self.main_layout.addWidget(self.project_nav_widget)
 
     def _populate_workspaces_combobox(self):
@@ -96,6 +94,7 @@ class WorkspaceNavigationWidget(QWidget):
 
         # Automatically select the first workspace if available
         if self.comboBox_workspace.count() > 0:
+            # Setting the current index will trigger on_workspace_selected via the signal
             self.comboBox_workspace.setCurrentIndex(0)
 
     def on_workspace_selected(self, index):
@@ -107,7 +106,7 @@ class WorkspaceNavigationWidget(QWidget):
         self.selected_workspace_id = workspace_id
 
         # Use the navigation widget to set the workspace and load its contents
-        self.project_nav_widget.set_workspace(workspace_id, self.custom_button_config)
+        self.project_nav_widget.set_workspace(workspace_id)
 
         # Emit the workspace_changed signal
         self.workspace_changed.emit(workspace_id)
@@ -119,37 +118,6 @@ class WorkspaceNavigationWidget(QWidget):
     def on_folder_selected(self, folder_id):
         """Forward the folder_selected signal"""
         self.folder_selected.emit(folder_id)
-
-    def set_custom_button(self, custom_button_config: Optional[Dict[str, Any]]):
-        """
-        Set a custom button configuration for folder items
-
-        Args:
-            custom_button_config (Dict[str, Any], optional): Custom button configuration for folder items
-                {
-                    'text': str,
-                    'tooltip': str,
-                    'callback': Callable[[str], None]
-                }
-        """
-        self.custom_button_config = custom_button_config
-
-        # If a workspace is already selected, update the navigation widget
-        if self.selected_workspace_id:
-            self.project_nav_widget.set_workspace(self.selected_workspace_id, custom_button_config)
-
-    def set_add_select_button(self, add_select_button: bool):
-        """
-        Set whether to add a select button to folder items
-
-        Args:
-            add_select_button (bool): Whether to add a select button
-        """
-        self.project_nav_widget.add_select_button = add_select_button
-
-        # If a workspace is already selected, update the navigation widget
-        if self.selected_workspace_id:
-            self.project_nav_widget.set_workspace(self.selected_workspace_id, self.custom_button_config)
 
     def get_selected_folder_id(self) -> Optional[str]:
         """

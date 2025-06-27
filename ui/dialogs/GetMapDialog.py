@@ -136,17 +136,9 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
             if not self.workspace_content_loaded:
                 # Create the workspace navigation widget if it doesn't exist
                 if not hasattr(self, 'workspace_nav_widget') or self.workspace_nav_widget is None:
-                    self.workspace_nav_widget = WorkspaceNavigationWidget(self)
+                    self.workspace_nav_widget = WorkspaceNavigationWidget(self, folder_select_mode=False)
                     self.workspace_nav_widget.folder_clicked.connect(self.on_folder_navigation)
-                    self.workspace_nav_widget.set_add_select_button(False)  # We don't need select buttons in this dialog
-
-                    # Add custom button configuration for "Tiling All" functionality
-                    custom_button = {
-                        'text': 'Tiling All',
-                        'tooltip': 'Add all maps in this folder as tiling services',
-                        'callback': self.on_tiling_all_clicked
-                    }
-                    self.workspace_nav_widget.set_custom_button(custom_button)
+                    # No need to set_add_select_button(False) as it's now handled by folder_select_mode
 
                 # Add the workspace navigation widget to the layout
                 self.list_layout.addWidget(self.workspace_nav_widget)
@@ -169,17 +161,8 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
     def on_folder_navigation(self, folder_id):
         """Handle folder navigation from the WorkspaceNavigationWidget"""
-        # Load the maps for the selected folder
-        self.load_maps_for_folder(folder_id)
-
-    def load_maps_for_folder(self, folder_id):
-        """Load maps for a folder (without handling folder navigation)"""
-        # Get folder details including maps
-        folder_details = get_maphub_client().folder.get_folder(folder_id)
-        maps = folder_details.get("map_infos", [])
-
-        # Display maps
-        self.load_maps(maps)
+        # Navigation is now handled by the WorkspaceNavigationWidget
+        pass
 
     # Navigation controls are now handled by ProjectNavigationWidget
 
@@ -280,12 +263,12 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         else:
             # Add map items to the list
             for map_data in maps:
-                self.add_map_item(map_data)
+                self.add_public_map_item(map_data)
 
 
     # Folder item display and workspace selection are now handled by WorkspaceNavigationWidget
 
-    def add_map_item(self, map_data):
+    def add_public_map_item(self, map_data):
         """Create a frame for each list item."""
         item_frame = QtWidgets.QFrame()
         item_frame.setObjectName("map_item_frame")  # Set object name for styling
@@ -510,92 +493,3 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         else:
             raise Exception(f"Unknown layer type: {map_data['type']}")
 
-    @handled_exceptions
-    def on_tiling_all_clicked(self, folder_id):
-        """Add all maps in a folder as tiling services"""
-        print(f"Adding all maps in folder {folder_id} as tiling services")
-
-        # Get all maps in the folder
-        client = get_maphub_client()
-        maps = client.folder.get_folder_maps(folder_id)
-
-        if not maps:
-            QMessageBox.information(
-                self,
-                "No Maps Found",
-                "There are no maps in this folder to add as tiling services."
-            )
-            return
-
-        # Create progress dialog
-        progress = QProgressBar()
-        progress.setMinimum(0)
-        progress.setMaximum(len(maps))
-        progress.setValue(0)
-
-        # Create a dialog that uses the same style as MapHubBaseDialog
-        progress_dialog = QtWidgets.QDialog(self)
-        progress_dialog.setWindowTitle("Adding Tiling Services")
-        progress_dialog.setMinimumWidth(300)
-
-        # Apply the same style as MapHubBaseDialog
-        if style:  # style is imported from MapHubBaseDialog
-            progress_dialog.setStyleSheet(style)
-
-        layout = QVBoxLayout(progress_dialog)
-        layout.addWidget(QLabel("Adding maps as tiling services..."))
-        layout.addWidget(progress)
-
-        progress_dialog.show()
-
-        # Sort maps based on order in visuals if available
-        def get_order(map_data: dict):
-            return map_data.get('visuals', {}).get('layer_order', (float('inf'),))
-        maps.sort(key=get_order)
-
-        # Add each map as a tiling service
-        success_count = 0
-        errors = []
-        project = QgsProject.instance()
-        for i, map_data in enumerate(maps):
-            try:
-                # Get layer info
-                layer_info = client.maps.get_layer_info(map_data['id'])
-                tiler_url = layer_info['tiling_url']
-                layer_name = map_data.get('name', f"Tiled Map {map_data['id']}")
-
-                # Add layer based on map type
-                if map_data.get('type') == 'vector':
-                    # Add as vector tile layer
-                    vector_tile_layer_string = f"type=xyz&url={tiler_url}&zmin={layer_info.get('min_zoom', 0)}&zmax={layer_info.get('max_zoom', 15)}"
-                    vector_layer = QgsVectorTileLayer(vector_tile_layer_string, layer_name)
-                    if vector_layer.isValid():
-                        place_layer_at_position(project, vector_layer, map_data.get('visuals', {}).get('layer_order'))
-                        if 'visuals' in map_data and map_data['visuals']:
-                            apply_style_to_layer(vector_layer, map_data['visuals'], tiling=True)
-                        success_count += 1
-                elif map_data.get('type') == 'raster':
-                    uri = f"type=xyz&url={tiler_url.replace('&', '%26')}"
-                    raster_layer = QgsRasterLayer(uri, layer_name, "wms")
-                    if raster_layer.isValid():
-                        place_layer_at_position(project, raster_layer, map_data.get('visuals', {}).get('layer_order'))
-                        if 'visuals' in map_data and map_data['visuals']:
-                            apply_style_to_layer(raster_layer, map_data['visuals'])
-                        success_count += 1
-
-                # Update progress
-                progress.setValue(i + 1)
-                QtWidgets.QApplication.processEvents()
-
-            except Exception as e:
-                errors.append(f"Error for map {map_data.get('name')} ({map_data.get('id')}): {e}")
-
-        # Close progress dialog
-        progress_dialog.close()
-
-        # Show completion message
-        QMessageBox.information(
-            self,
-            "Tiling Services Added",
-            f"Successfully added {success_count} out of {len(maps)} maps as tiling services." + ("\n\nErrors:\n" + "\n".join(errors)) if errors else ""
-        )
