@@ -635,8 +635,11 @@ class ProjectNavigationWidget(QWidget):
         progress_dialog.close()
 
         # Show completion message
+        message = f"Successfully added {success_count} out of {len(maps)} maps as tiling services."
+        if errors:
+            message += "\n\nErrors:\n" + "\n".join(errors)
         QMessageBox.information(
             self,
             "Tiling Services Added",
-            f"Successfully added {success_count} out of {len(maps)} maps as tiling services." + ("\n\nErrors:\n" + "\n".join(errors)) if errors else ""
+            message
         )
