@@ -2,9 +2,10 @@ import os
 import json
 import uuid
 import shutil
+import platform
 from pathlib import Path
 
-from PyQt5.QtCore import pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSignal, Qt, QStandardPaths
 from PyQt5.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QProgressBar, 
                             QMessageBox, QPushButton, QSpacerItem, QSizePolicy, QFrame)
 from PyQt5.QtGui import QIcon, QCursor
@@ -36,6 +37,10 @@ class CloneFolderDialog(MapHubBaseDialog, FORM_CLASS):
 
         # Get the list layout for folders
         self.list_layout = self.findChild(QtWidgets.QVBoxLayout, 'listLayout')
+
+        # Set default destination to documents folder
+        documents_path = self.get_documents_folder()
+        self.lineEdit_path.setText(str(documents_path))
 
         # Create and set up the workspace navigation widget
         self.workspace_nav_widget = WorkspaceNavigationWidget(self)
@@ -113,12 +118,22 @@ class CloneFolderDialog(MapHubBaseDialog, FORM_CLASS):
             if current_folder_id:
                 self.workspace_nav_widget.load_folder_contents(current_folder_id)
 
+    def get_documents_folder(self):
+        """Return the path to the system's documents folder"""
+        # Use QStandardPaths to get the documents location (cross-platform)
+        documents_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        return Path(documents_path)
+
     def browse_destination(self):
         """Open file dialog to select destination directory"""
+        # Use current path as starting directory if it exists, otherwise use documents folder
+        current_path = self.lineEdit_path.text()
+        start_dir = current_path if current_path and os.path.exists(current_path) else str(self.get_documents_folder())
+
         directory = QFileDialog.getExistingDirectory(
             self,
             "Select Destination Directory",
-            ""
+            start_dir
         )
         if directory:
             self.lineEdit_path.setText(directory)
