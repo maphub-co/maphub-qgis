@@ -14,7 +14,7 @@ from qgis.core import (
 )
 
 from .CloneFolderDialog import CloneFolderDialog
-from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, layer_position
+from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, layer_position, place_layer_at_position
 from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
@@ -79,14 +79,14 @@ class PushProjectDialog(MapHubBaseDialog, FORM_CLASS):
             layer_info = {
                 'source': layer.source(),
                 'name': layer.name(),
-                'type': 'vector' if isinstance(layer, QgsVectorLayer) else 'raster' if isinstance(layer,
-                                                                                                  QgsRasterLayer) else 'unknown'
+                'type': 'vector' if isinstance(layer, QgsVectorLayer) else 'raster' if isinstance(layer,                                                                                                  QgsRasterLayer) else 'unknown',
+                'position': layer_position(project, layer)  # Store the layer position
             }
 
             # Save style information if available
             if layer.styleManager().currentStyle():
-                layer_info['style'] = layer.styleManager().style(layer.styleManager().currentStyle())
-                layer_info['style_name'] = layer.styleManager().currentStyle()
+                print(f"Saving layer {layer_info['name']} from saved file")
+                layer_info['style'] = get_layer_styles_as_json(layer, {})
 
             saved_layers.append(layer_info)
 
@@ -165,8 +165,22 @@ class PushProjectDialog(MapHubBaseDialog, FORM_CLASS):
         temp_project = QgsProject()
         temp_project.read(str(project_path))
 
+        # Sort the saved layers by their position to ensure they're added in the correct order
+        # Layers with no position or empty position list will be added last
+        if saved_layers:
+            # Define a key function for sorting
+            def get_position_key(layer_info):
+                # If position exists and is not empty, use it for sorting
+                if 'position' in layer_info and layer_info['position']:
+                    # Convert position list to a tuple for sorting
+                    return tuple(layer_info['position'])
+                # If no position, return a large tuple to sort it at the end
+                return (float('inf'),)
 
-        # Add each saved layer to the temporary project
+            # Sort the saved_layers list in-place
+            saved_layers.sort(key=get_position_key)
+
+        # Add each saved layer to the temporary project in the sorted order
         for layer_info in saved_layers:
             # Create a new layer based on the saved information
             if layer_info['type'] == 'vector':
@@ -177,16 +191,17 @@ class PushProjectDialog(MapHubBaseDialog, FORM_CLASS):
                 continue
 
             if new_layer.isValid():
+                print(f"Adding layer {layer_info['name']} from saved file")
                 # Apply the original style to the new layer if available
-                if 'style' in layer_info and 'style_name' in layer_info:
-                    new_layer.styleManager().addStyle(
-                        layer_info['style_name'],
-                        layer_info['style']
-                    )
-                    new_layer.styleManager().setCurrentStyle(layer_info['style_name'])
+                if 'style' in layer_info:
+                    apply_style_to_layer(new_layer, layer_info['style'])
 
-                # Add the new layer to the temporary project
-                temp_project.addMapLayer(new_layer)
+                # Add the new layer to the temporary project at its original position
+                if 'position' in layer_info and layer_info['position']:
+                    place_layer_at_position(temp_project, new_layer, layer_info['position'])
+                else:
+                    # Fallback to the old method if position information is not available
+                    temp_project.addMapLayer(new_layer)
 
         # Save the temporary project with the added layers
         temp_project.write(str(project_path))

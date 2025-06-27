@@ -249,7 +249,10 @@ class PullProjectDialog(MapHubBaseDialog, FORM_CLASS):
         for layer_id, layer in project.mapLayers().items():
             existing_layers[str(Path(layer.source()).resolve())] = layer
 
-        # Find all GIS files in the folder and add them as layers if they don't exist
+        # Collect new layers to add
+        new_layers = []
+
+        # Find all GIS files in the folder
         for root, dirs, files in os.walk(folder_path):
             for file in files:
                 file_path = Path(root) / file
@@ -258,67 +261,82 @@ class PullProjectDialog(MapHubBaseDialog, FORM_CLASS):
                 if ".maphub" in str(file_path):
                     continue
 
+                abs_path = str(file_path.resolve())
+
+                # Update existing layers with new styles
+                if abs_path in existing_layers:
+                    # Layer already exists, check if we need to update style
+                    layer = existing_layers[abs_path]
+                    # Apply style directly from memory if available
+                    if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
+                        apply_style_to_layer(layer, self.file_styles[str(file_path)])
+                        print(f"Applied style to existing layer {layer.name()} directly from memory")
+                        layer.triggerRepaint()
+                    continue
+
                 # Process vector layers
                 if file.endswith(('.shp', '.gpkg', '.geojson', '.kml', '.fgb')):
-                    abs_path = str(file_path.resolve())
-                    if abs_path in existing_layers:
-                        # Layer already exists, check if we need to update style
-                        layer = existing_layers[abs_path]
-                        # Apply style directly from memory if available
+                    # New layer, prepare it for adding to the project
+                    layer = QgsVectorLayer(str(file_path), file_path.stem, "ogr")
+                    if layer.isValid():
+                        # Get the visuals data for this layer
+                        layer_visuals = None
                         if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
-                            apply_style_to_layer(layer, self.file_styles[str(file_path)])
-                            print(f"Applied style to existing layer {layer.name()} directly from memory")
-                            layer.triggerRepaint()
-                    else:
-                        # New layer, add it to the project
-                        layer = QgsVectorLayer(str(file_path), file_path.stem, "ogr")
-                        if layer.isValid():
-                            # Get the visuals data for this layer
-                            layer_visuals = None
-                            if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
-                                layer_visuals = self.file_styles[str(file_path)]
-                                apply_style_to_layer(layer, layer_visuals)
-                                print(f"Applied style to new layer {layer.name()} directly from memory")
+                            layer_visuals = self.file_styles[str(file_path)]
+                            apply_style_to_layer(layer, layer_visuals)
+                            print(f"Applied style to new layer {layer.name()} directly from memory")
 
-                            # Check if layer_order is available in the visuals data
-                            if layer_visuals and "layer_order" in layer_visuals:
-                                # Place the layer at the specified position
-                                place_layer_at_position(project, layer, layer_visuals["layer_order"])
-                                print(f"Placed layer {layer.name()} at position {layer_visuals['layer_order']}")
-                            else:
-                                # Fall back to adding the layer to the root
-                                project.addMapLayer(layer)
+                        # Store layer info for later sorting and adding
+                        layer_info = {
+                            'layer': layer,
+                            'position': layer_visuals.get("layer_order", []) if layer_visuals else []
+                        }
+                        new_layers.append(layer_info)
 
                 # Process raster layers
                 elif file.endswith(('.tif', '.tiff', '.jpg', '.png')):
-                    abs_path = str(file_path.resolve())
-                    if abs_path in existing_layers:
-                        # Layer already exists, check if we need to update style
-                        layer = existing_layers[abs_path]
-                        # Apply style directly from memory if available
+                    # New layer, prepare it for adding to the project
+                    layer = QgsRasterLayer(str(file_path), file_path.stem)
+                    if layer.isValid():
+                        # Get the visuals data for this layer
+                        layer_visuals = None
                         if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
-                            apply_style_to_layer(layer, self.file_styles[str(file_path)])
-                            print(f"Applied style to existing layer {layer.name()} directly from memory")
-                            layer.triggerRepaint()
-                    else:
-                        # New layer, add it to the project
-                        layer = QgsRasterLayer(str(file_path), file_path.stem)
-                        if layer.isValid():
-                            # Get the visuals data for this layer
-                            layer_visuals = None
-                            if hasattr(self, 'file_styles') and str(file_path) in self.file_styles:
-                                layer_visuals = self.file_styles[str(file_path)]
-                                apply_style_to_layer(layer, layer_visuals)
-                                print(f"Applied style to new layer {layer.name()} directly from memory")
+                            layer_visuals = self.file_styles[str(file_path)]
+                            apply_style_to_layer(layer, layer_visuals)
+                            print(f"Applied style to new layer {layer.name()} directly from memory")
 
-                            # Check if layer_order is available in the visuals data
-                            if layer_visuals and "layer_order" in layer_visuals:
-                                # Place the layer at the specified position
-                                place_layer_at_position(project, layer, layer_visuals["layer_order"])
-                                print(f"Placed layer {layer.name()} at position {layer_visuals['layer_order']}")
-                            else:
-                                # Fall back to adding the layer to the root
-                                project.addMapLayer(layer)
+                        # Store layer info for later sorting and adding
+                        layer_info = {
+                            'layer': layer,
+                            'position': layer_visuals.get("layer_order", []) if layer_visuals else []
+                        }
+                        new_layers.append(layer_info)
+
+        # Sort the new layers by their position to ensure they're added in the correct order
+        # Layers with no position or empty position list will be added last
+        def get_position_key(layer_info):
+            # If position exists and is not empty, use it for sorting
+            if layer_info['position']:
+                # Convert position list to a tuple for sorting
+                return tuple(layer_info['position'])
+            # If no position, return a large tuple to sort it at the end
+            return (float('inf'),)
+
+        # Sort the new_layers list
+        new_layers.sort(key=get_position_key)
+
+        # Add the sorted layers to the project
+        for layer_info in new_layers:
+            layer = layer_info['layer']
+            position = layer_info['position']
+
+            if position:
+                # Place the layer at the specified position
+                place_layer_at_position(project, layer, position)
+                print(f"Placed layer {layer.name()} at position {position}")
+            else:
+                # Fall back to adding the layer to the root
+                project.addMapLayer(layer)
 
         # Save the project
         project.write()

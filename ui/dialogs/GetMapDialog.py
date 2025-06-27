@@ -59,13 +59,26 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         self.iface = iface
         self.thumb_loaders = []
 
-        self.list_layout = self.findChild(QtWidgets.QVBoxLayout, 'listLayout')
+        # Initialize both list layouts
+        self.list_layout_workspace = self.findChild(QtWidgets.QVBoxLayout, 'listLayout')
+        self.list_layout_public = self.findChild(QtWidgets.QVBoxLayout, 'listLayout_public')
+
+        # Current active list layout (will be set in on_tab_changed)
+        self.list_layout = self.list_layout_workspace
 
         # The workspace navigation widget will be created when needed in on_tab_changed
         self.workspace_nav_widget = None
 
-        # Clear layout
-        self.clear_list_layout()
+        # Track if content has been loaded for each tab
+        self.workspace_content_loaded = False
+        self.public_content_loaded = False
+
+        # Find the scroll area widgets to hide/show them
+        self.scroll_area_workspace = self.findChild(QtWidgets.QScrollArea, 'scrollArea_workspace')
+        self.scroll_area_public = self.findChild(QtWidgets.QScrollArea, 'scrollArea_public')
+
+        # Initially hide the public scroll area since we start with the workspace tab
+        self.scroll_area_public.setVisible(False)
 
         # Connect signals
         self.tabWidget_map_type.currentChanged.connect(self.on_tab_changed)
@@ -78,20 +91,6 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
     def closeEvent(self, event):
         """Handle close event, clean up resources"""
-        # Clear the list
-        self.clear_list_layout()
-
-        # Emit closing signal
-        self.closingPlugin.emit()
-        event.accept()
-
-    def clear_list_layout(self):
-        """Clear all widgets from the list layout"""
-        # while self.list_layout.count():
-        #     item = self.list_layout.takeAt(0)
-        #     if item.widget():
-        #         item.widget().deleteLater()
-        #
         # Cancel any running threads
         for loader in self.thumb_loaders:
             if loader.isRunning():
@@ -99,41 +98,73 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
                 loader.wait()
         self.thumb_loaders = []
 
-        for i in reversed(range(self.list_layout.count())):
-            widget = self.list_layout.itemAt(i).widget()
-            if widget is not None:
-                widget.deleteLater()
+        # Reset content loaded flags
+        self.workspace_content_loaded = False
+        self.public_content_loaded = False
+
+        # Emit closing signal
+        self.closingPlugin.emit()
+        event.accept()
+
+    def clear_list_layout(self):
+        """Clear all widgets from the list layout"""
+        # Cancel any running threads
+        for loader in self.thumb_loaders:
+            if loader.isRunning():
+                loader.terminate()
+                loader.wait()
+        self.thumb_loaders = []
+
+        # Clear the current active list layout
+        if self.list_layout:
+            for i in reversed(range(self.list_layout.count())):
+                widget = self.list_layout.itemAt(i).widget()
+                if widget is not None:
+                    widget.deleteLater()
 
     def on_tab_changed(self, index):
         """Handle tab change event"""
-        self.clear_list_layout()
-
         if index == 0:  # workspace Maps tab
-            # Recreate the workspace navigation widget if it was deleted
-            if not hasattr(self, 'workspace_nav_widget') or self.workspace_nav_widget is None:
-                self.workspace_nav_widget = WorkspaceNavigationWidget(self)
-                self.workspace_nav_widget.folder_clicked.connect(self.on_folder_navigation)
-                self.workspace_nav_widget.set_add_select_button(False)  # We don't need select buttons in this dialog
+            # Set the active list layout to workspace
+            self.list_layout = self.list_layout_workspace
 
-                # Add custom button configuration for "Tiling All" functionality
-                custom_button = {
-                    'text': 'Tiling All',
-                    'tooltip': 'Add all maps in this folder as tiling services',
-                    'callback': self.on_tiling_all_clicked
-                }
-                self.workspace_nav_widget.set_custom_button(custom_button)
+            # Show workspace content, hide public content
+            self.scroll_area_workspace.setVisible(True)
+            self.scroll_area_public.setVisible(False)
 
-            # Add the workspace navigation widget to the layout
-            self.list_layout.addWidget(self.workspace_nav_widget)
+            # Initialize workspace content if not already loaded
+            if not self.workspace_content_loaded:
+                # Create the workspace navigation widget if it doesn't exist
+                if not hasattr(self, 'workspace_nav_widget') or self.workspace_nav_widget is None:
+                    self.workspace_nav_widget = WorkspaceNavigationWidget(self)
+                    self.workspace_nav_widget.folder_clicked.connect(self.on_folder_navigation)
+                    self.workspace_nav_widget.set_add_select_button(False)  # We don't need select buttons in this dialog
+
+                    # Add custom button configuration for "Tiling All" functionality
+                    custom_button = {
+                        'text': 'Tiling All',
+                        'tooltip': 'Add all maps in this folder as tiling services',
+                        'callback': self.on_tiling_all_clicked
+                    }
+                    self.workspace_nav_widget.set_custom_button(custom_button)
+
+                # Add the workspace navigation widget to the layout
+                self.list_layout.addWidget(self.workspace_nav_widget)
+                self.workspace_content_loaded = True
 
         else:  # Public Maps tab
-            # Remove the workspace navigation widget from the layout if it's there
-            if hasattr(self, 'workspace_nav_widget') and self.workspace_nav_widget is not None:
-                self.workspace_nav_widget.setParent(None)
-                self.workspace_nav_widget = None  # Clear the reference to allow garbage collection
+            # Set the active list layout to public
+            self.list_layout = self.list_layout_public
 
-            # Load public maps with default sorting (Recent)
-            self.load_public_maps()
+            # Show public content, hide workspace content
+            self.scroll_area_workspace.setVisible(False)
+            self.scroll_area_public.setVisible(True)
+
+            # Load public maps if not already loaded
+            if not self.public_content_loaded:
+                # Load public maps with default sorting (Recent)
+                self.load_public_maps()
+                self.public_content_loaded = True
 
 
     def on_folder_navigation(self, folder_id):
@@ -187,9 +218,11 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
     def load_public_maps(self, sort_by="recent", page=1, append=False):
         """Load public maps with optional sorting and pagination"""
-        # Clear any existing items if not appending
+        # Clear any existing items if not appending and we're reloading the content
         if not append:
-            self.clear_list_layout()
+            # Only clear if we're actively in the public tab
+            if self.tabWidget_map_type.currentIndex() == 1:
+                self.clear_list_layout()
 
         # Get maps
         public_maps_response = get_maphub_client().maps.get_public_maps(sort_by=sort_by, page=page)
@@ -212,19 +245,23 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
     def on_load_more_clicked(self, next_page: int, sort_by: str):
         """Handle click on the 'Load more' button"""
-        # Remove the current load more button first
-        for i in reversed(range(self.list_layout.count())):
-            widget = self.list_layout.itemAt(i).widget()
-            if widget is not None and widget.objectName() == "load_more_button":
-                widget.deleteLater()
-                break
+        # Only proceed if we're in the public tab
+        if self.tabWidget_map_type.currentIndex() == 1:
+            # Remove the current load more button first
+            for i in reversed(range(self.list_layout.count())):
+                widget = self.list_layout.itemAt(i).widget()
+                if widget is not None and widget.objectName() == "load_more_button":
+                    widget.deleteLater()
+                    break
 
-        # Increment page and load more maps
-        self.load_public_maps(sort_by=sort_by, page=next_page, append=True)
+            # Increment page and load more maps
+            self.load_public_maps(sort_by=sort_by, page=next_page, append=True)
 
     def search_public_maps(self, search_term, sort_by="recent"):
         """Search for public maps"""
-        self.clear_list_layout()
+        # Only clear if we're actively in the public tab
+        if self.tabWidget_map_type.currentIndex() == 1:
+            self.clear_list_layout()
 
         if not search_term:
             self.load_public_maps(sort_by)
@@ -472,7 +509,6 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
                 self.iface.messageBar().pushWarning("Warning", f"Could not add XYZ tile layer from URL: {tiler_url}")
         else:
             raise Exception(f"Unknown layer type: {map_data['type']}")
-
 
     @handled_exceptions
     def on_tiling_all_clicked(self, folder_id):

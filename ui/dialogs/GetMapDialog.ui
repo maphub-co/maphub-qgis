@@ -55,7 +55,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget_map_type">
      <property name="sizePolicy">
-      <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
        <horstretch>0</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
@@ -68,6 +68,45 @@
        <string>Personal Maps</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_workspace">
+       <item>
+        <widget class="QScrollArea" name="scrollArea_workspace">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContents_workspace">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>580</width>
+            <height>453</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_workspace_content">
+           <item>
+            <widget class="QWidget" name="listContainer_workspace" native="true">
+             <layout class="QVBoxLayout" name="listLayout">
+              <!-- List items will be added here programmatically -->
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer_workspace">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
       </layout>
      </widget>
      <widget class="QWidget" name="tab_public_maps">
@@ -143,44 +182,44 @@
          </item>
         </layout>
        </item>
-      </layout>
-     </widget>
-    </widget>
-   </item>
-   <item>
-    <widget class="QScrollArea" name="scrollArea">
-     <property name="widgetResizable">
-      <bool>true</bool>
-     </property>
-     <widget class="QWidget" name="scrollAreaWidgetContents">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>580</width>
-        <height>453</height>
-       </rect>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout_2">
        <item>
-        <widget class="QWidget" name="listContainer" native="true">
-         <layout class="QVBoxLayout" name="listLayout">
-          <!-- List items will be added here programmatically -->
-         </layout>
+        <widget class="QScrollArea" name="scrollArea_public">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContents_public">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>580</width>
+            <height>453</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_public_content">
+           <item>
+            <widget class="QWidget" name="listContainer_public" native="true">
+             <layout class="QVBoxLayout" name="listLayout_public">
+              <!-- List items will be added here programmatically -->
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer_public">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
         </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
        </item>
       </layout>
      </widget>
