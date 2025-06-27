@@ -102,7 +102,7 @@ class MapsEndpoint(BaseEndpoint):
             "folder_id": str(folder_id),
             "map_name": map_name,
             "public": public,
-            # "colormap": "viridis",
+            "colormap": "viridis",
             # "vector_lod": 8,
         }
 
