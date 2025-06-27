@@ -22,7 +22,7 @@ from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
-from ...utils import get_maphub_client, handled_exceptions, apply_style_to_layer
+from ...utils import get_maphub_client, handled_exceptions, apply_style_to_layer, place_layer_at_position
 from .MapHubBaseDialog import MapHubBaseDialog, style
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
 
@@ -491,7 +491,7 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
             if vector_layer.isValid():
                 QgsProject.instance().addMapLayer(vector_layer)
                 if 'visuals' in map_data and map_data['visuals']:
-                    apply_style_to_layer(vector_layer, map_data['visuals'])
+                    apply_style_to_layer(vector_layer, map_data['visuals'], tiling=True)
                 self.iface.messageBar().pushSuccess("Success", f"Vector tile layer '{layer_name}' added.")
             else:
                 self.iface.messageBar().pushWarning("Warning", f"Could not add vector tile layer from URL: {tiler_url}")
@@ -516,7 +516,8 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         print(f"Adding all maps in folder {folder_id} as tiling services")
 
         # Get all maps in the folder
-        maps = get_maphub_client().folder.get_folder_maps(folder_id)
+        client = get_maphub_client()
+        maps = client.folder.get_folder_maps(folder_id)
 
         if not maps:
             QMessageBox.information(
@@ -547,12 +548,19 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
         progress_dialog.show()
 
+        # Sort maps based on order in visuals if available
+        def get_order(map_data: dict):
+            return map_data.get('visuals', {}).get('layer_order', (float('inf'),))
+        maps.sort(key=get_order)
+
         # Add each map as a tiling service
         success_count = 0
+        errors = []
+        project = QgsProject.instance()
         for i, map_data in enumerate(maps):
             try:
                 # Get layer info
-                layer_info = get_maphub_client().maps.get_layer_info(map_data['id'])
+                layer_info = client.maps.get_layer_info(map_data['id'])
                 tiler_url = layer_info['tiling_url']
                 layer_name = map_data.get('name', f"Tiled Map {map_data['id']}")
 
@@ -562,15 +570,15 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
                     vector_tile_layer_string = f"type=xyz&url={tiler_url}&zmin={layer_info.get('min_zoom', 0)}&zmax={layer_info.get('max_zoom', 15)}"
                     vector_layer = QgsVectorTileLayer(vector_tile_layer_string, layer_name)
                     if vector_layer.isValid():
-                        QgsProject.instance().addMapLayer(vector_layer)
+                        place_layer_at_position(project, vector_layer, map_data.get('visuals', {}).get('layer_order'))
                         if 'visuals' in map_data and map_data['visuals']:
-                            apply_style_to_layer(vector_layer, map_data['visuals'])
+                            apply_style_to_layer(vector_layer, map_data['visuals'], tiling=True)
                         success_count += 1
                 elif map_data.get('type') == 'raster':
                     uri = f"type=xyz&url={tiler_url.replace('&', '%26')}"
                     raster_layer = QgsRasterLayer(uri, layer_name, "wms")
                     if raster_layer.isValid():
-                        QgsProject.instance().addMapLayer(raster_layer)
+                        place_layer_at_position(project, raster_layer, map_data.get('visuals', {}).get('layer_order'))
                         if 'visuals' in map_data and map_data['visuals']:
                             apply_style_to_layer(raster_layer, map_data['visuals'])
                         success_count += 1
@@ -580,7 +588,7 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
                 QtWidgets.QApplication.processEvents()
 
             except Exception as e:
-                print(f"Error adding tiling service for map {map_data.get('id')}: {e}")
+                errors.append(f"Error for map {map_data.get('name')} ({map_data.get('id')}): {e}")
 
         # Close progress dialog
         progress_dialog.close()
@@ -589,5 +597,5 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         QMessageBox.information(
             self,
             "Tiling Services Added",
-            f"Successfully added {success_count} out of {len(maps)} maps as tiling services."
+            f"Successfully added {success_count} out of {len(maps)} maps as tiling services." + ("\n\nErrors:\n" + "\n".join(errors)) if errors else ""
         )

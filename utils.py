@@ -1,6 +1,7 @@
 import json
 import traceback
 from typing import Dict, Any
+from xml.etree import ElementTree as ET
 
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
@@ -126,7 +127,84 @@ def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:
     return visuals
 
 
-def apply_style_to_layer(layer, visuals: Dict[str, Any]):
+
+def vector_style_to_tiling_style(style: str) -> str:
+    """
+    Convert a QGIS .qml style file from a local vector layer format to one compatible with vector tile layers.
+    Removes unsupported sections and keeps only essential symbology.
+    """
+    # Parse the XML content
+    root = ET.fromstring(style)
+
+    # Create a new <qgis> root element for the vector tile format
+    new_root = ET.Element('qgis', {
+        'styleCategories': 'AllStyleCategories',
+        'version': root.attrib.get('version', '3.34.4-Prizren'),
+        'hasScaleBasedVisibilityFlag': '0',
+        'maxScale': '0',
+        'minScale': '100000000'
+    })
+
+    # Copy over the <renderer-v2> section (symbology) and convert it to a renderer section that is applyed to any geometry
+    symbols = root.find('renderer-v2').find('symbols')
+    if symbols is not None:
+        renderer = ET.Element('renderer', {
+            "type": "basic"
+        })
+
+        poly_style = ET.Element('style', {
+            'min-zoom': '-1',
+            'max-zoom': '-1',
+            'name': 'Polygons',
+            'enabled': '1',
+            'expression': "geometry_type(@geometry)='Polygon'",
+            'layer': '',
+            'geometry': '2'
+        })
+        poly_style.append(symbols)
+
+        line_style = ET.Element('style', {
+            'min-zoom': '-1',
+            'max-zoom': '-1',
+            'name': 'Lines',
+            'enabled': '1',
+            'expression': "geometry_type(@geometry)='Line'",
+            'layer': '',
+            'geometry': '1'
+        })
+        line_style.append(symbols)
+
+        point_style = ET.Element('style', {
+            'min-zoom': '-1',
+            'max-zoom': '-1',
+            'name': 'Points',
+            'enabled': '1',
+            'expression': "geometry_type(@geometry)='Point'",
+            'layer': '',
+            'geometry': '0'
+        })
+        point_style.append(symbols)
+
+        styles = ET.Element('styles')
+        styles.extend([poly_style, line_style, point_style])
+        renderer.append(styles)
+        new_root.append(renderer)
+
+    # Add <customproperties> if they exist
+    custom_props = root.find('customproperties')
+    if custom_props is not None:
+        new_root.append(custom_props)
+
+    # Add <blendMode> if it exists
+    blend_mode = root.find('blendMode')
+    if blend_mode is not None:
+        new_root.append(blend_mode)
+
+    # Return the result as a string
+    return ET.tostring(new_root, encoding='unicode')
+
+
+def apply_style_to_layer(layer, visuals: Dict[str, Any], tiling: bool = False):
     """
     Apply a specific style to a given map layer using a provided set of visuals.
 
@@ -144,6 +222,7 @@ def apply_style_to_layer(layer, visuals: Dict[str, Any]):
                     SLD styling (path/location or XML definition). Both keys are
                     optional, but at least one must be valid for the function to
                     succeed.
+    :param tiling: Whether to convert the style to a format compatible with vector tile layers.
 
     :return: True if the style was successfully applied, False otherwise.
     :rtype: bool
@@ -162,7 +241,13 @@ def apply_style_to_layer(layer, visuals: Dict[str, Any]):
     if "qgis" in visuals and visuals["qgis"]:
         try:
             qgis_doc = QDomDocument()
-            if not qgis_doc.setContent(visuals["qgis"]):
+
+            if tiling:
+                qgis_style = vector_style_to_tiling_style(visuals["qgis"])
+            else:
+                qgis_style = visuals["qgis"]
+
+            if not qgis_doc.setContent(qgis_style):
                 print(f"Failed to parse QGIS style XML: Invalid XML format")
             else:
                 success = layer.importNamedStyle(qgis_doc)
