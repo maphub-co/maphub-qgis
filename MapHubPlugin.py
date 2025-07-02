@@ -150,14 +150,13 @@ class MapHubPlugin:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = ':/plugins/maphub/icon.png'
         icon_path = os.path.join(self.plugin_dir, 'icon.png')
         self.add_action(
-            icon_path,
-            text=self.tr(u'Get Map from MapHub'),
+            os.path.join(self.plugin_dir, 'get.png'),
+            text=self.tr(u'Get map'),
             callback=self.get_map,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=False
+            add_to_toolbar=True
         )
 
         self.add_action(
