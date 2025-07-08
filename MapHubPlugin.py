@@ -7,7 +7,7 @@ import zipfile
 import glob
 
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 
@@ -19,6 +19,7 @@ from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
 from .ui.dialogs.UploadMapDialog import UploadMapDialog
 from .ui.dialogs.PullProjectDialog import PullProjectDialog
 from .ui.dialogs.PushProjectDialog import PushProjectDialog
+from .ui.widgets.MapBrowserDockWidget import MapBrowserDockWidget
 
 
 
@@ -207,6 +208,14 @@ class MapHubPlugin:
             add_to_toolbar=True
         )
 
+        self.add_action(
+            os.path.join(self.plugin_dir, 'icon.png'),
+            text=self.tr(u'MapHub Browser'),
+            callback=self.show_map_browser,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=True
+        )
+
         # will be set False in run()
         self.first_start = True
 
@@ -272,6 +281,16 @@ class MapHubPlugin:
         """Show push project dialog to push the current project data to MapHub."""
         dlg = PushProjectDialog(self.iface, self.iface.mainWindow())
         result = dlg.exec_()
+
+    @handled_exceptions
+    def show_map_browser(self, checked=False):
+        """Show the map browser dock widget."""
+        if not hasattr(self, 'map_browser_dock') or self.map_browser_dock is None:
+            self.map_browser_dock = MapBrowserDockWidget(self.iface, self.iface.mainWindow())
+            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.map_browser_dock)
+        else:
+            # If the dock widget exists but is hidden, show it
+            self.map_browser_dock.setVisible(True)
 
     @handled_exceptions
     def clone_project(self, checked=False):

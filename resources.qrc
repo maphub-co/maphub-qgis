@@ -4,5 +4,10 @@
         <file>clone.png</file>
         <file>pull.png</file>
         <file>push.png</file>
+        <file>get.png</file>
+        <file>icons/workspace.svg</file>
+        <file>icons/folder.svg</file>
+        <file>icons/vector_map.svg</file>
+        <file>icons/raster_map.svg</file>
     </qresource>
 </RCC>
