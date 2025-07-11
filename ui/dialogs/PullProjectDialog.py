@@ -3,13 +3,12 @@ import json
 import uuid
 from pathlib import Path
 
-from PyQt5.QtCore import pyqtSignal, Qt, QUrl
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QProgressBar, QMessageBox
-from PyQt5.QtGui import QDesktopServices
 from qgis.PyQt import uic, QtWidgets
 from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer
 
-from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
+from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
 from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer

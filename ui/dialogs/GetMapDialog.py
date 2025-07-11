@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import os
-import json
 import requests
-import tempfile
 
-from PyQt5 import QtGui, QtCore, QtWidgets, uic
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
-from PyQt5.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout,
-                             QWidget, QPushButton, QSizePolicy, QSpacerItem,
-                             QMessageBox, QGroupBox, QProgressBar)
-from PyQt5.QtGui import QPixmap, QIcon, QCursor, QFont
+from PyQt5 import QtWidgets, uic
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QLabel, QPushButton, QMessageBox)
 from qgis.core import Qgis, QgsProject
 from qgis.utils import iface
 
@@ -22,8 +17,8 @@ from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
 
-from ...utils import get_maphub_client, handled_exceptions, apply_style_to_layer, place_layer_at_position
-from .MapHubBaseDialog import MapHubBaseDialog, style
+from ...utils.utils import get_maphub_client, handled_exceptions, apply_style_to_layer
+from .MapHubBaseDialog import MapHubBaseDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
 
 

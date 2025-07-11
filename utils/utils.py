@@ -9,9 +9,9 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from PyQt5.QtXml import QDomDocument
 
-from .maphub import MapHubClient
-from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
-from .maphub.exceptions import APIException
+from ..maphub import MapHubClient
+from ..ui.dialogs.ApiKeyDialog import ApiKeyDialog
+from ..maphub.exceptions import APIException
 
 
 def show_error_dialog(message, title="Error"):

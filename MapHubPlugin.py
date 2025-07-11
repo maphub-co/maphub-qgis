@@ -2,9 +2,6 @@
 
 import os
 import os.path
-import tempfile
-import zipfile
-import glob
 
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
@@ -14,7 +11,7 @@ from qgis.PyQt.QtWidgets import QAction, QMessageBox
 from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
 from .ui.dialogs.GetMapDialog import GetMapDialog
 from .ui.dialogs.CreateFolderDialog import CreateFolderDialog
-from .utils import handled_exceptions, show_error_dialog
+from .utils.utils import handled_exceptions
 from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
 from .ui.dialogs.UploadMapDialog import UploadMapDialog
 from .ui.dialogs.PullProjectDialog import PullProjectDialog

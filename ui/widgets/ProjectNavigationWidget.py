@@ -1,16 +1,16 @@
 import os
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional
 
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QByteArray
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, 
                             QPushButton, QLabel, QSpacerItem, QSizePolicy,
                             QComboBox, QApplication, QDialog, QFileDialog, QMessageBox,
                             QProgressBar)
-from PyQt5.QtGui import QIcon, QCursor, QPixmap, QColor, QFont
+from PyQt5.QtGui import QIcon, QCursor, QPixmap, QColor
 from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
-from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
+from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
 from ..dialogs.MapHubBaseDialog import style
 
 

@@ -1,20 +1,17 @@
 import os
 import json
 import uuid
-import shutil
-import platform
 from pathlib import Path
 
 from PyQt5.QtCore import pyqtSignal, Qt, QStandardPaths
-from PyQt5.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QProgressBar, 
-                            QMessageBox, QPushButton, QSpacerItem, QSizePolicy, QFrame)
+from PyQt5.QtWidgets import (QMessageBox)
 from PyQt5.QtGui import QIcon, QCursor
 from qgis.PyQt import uic, QtWidgets
 from qgis.PyQt.QtWidgets import QFileDialog
 from qgis.core import (QgsCoordinateReferenceSystem, QgsProject, QgsVectorLayer, 
                       QgsRasterLayer, QgsMapLayer)
 
-from ...utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, place_layer_at_position
+from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
 from .MapHubBaseDialog import MapHubBaseDialog
 from .CreateFolderDialog import CreateFolderDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget

@@ -1,10 +1,10 @@
-from typing import List, Dict, Any, Optional, Callable
+from typing import Optional
 
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                            QComboBox, QFrame, QSizePolicy)
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                             QComboBox, QFrame)
 
-from ...utils import get_maphub_client
+from ...utils.utils import get_maphub_client
 from .ProjectNavigationWidget import ProjectNavigationWidget
 
 

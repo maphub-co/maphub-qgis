@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-import glob
-import json
 import os
 import tempfile
-import zipfile
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
@@ -12,7 +9,7 @@ from qgis.PyQt.QtGui import QIcon, QCursor
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
-from ...utils import get_maphub_client, handled_exceptions, show_error_dialog, get_layer_styles_as_json
+from ...utils.utils import get_maphub_client, handled_exceptions, get_layer_styles_as_json
 from .MapHubBaseDialog import MapHubBaseDialog
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
