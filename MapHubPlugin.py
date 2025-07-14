@@ -210,7 +210,7 @@ class MapHubPlugin:
             text=self.tr(u'MapHub Browser'),
             callback=self.show_map_browser,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=True
+            add_to_toolbar=False
         )
 
         # will be set False in run()

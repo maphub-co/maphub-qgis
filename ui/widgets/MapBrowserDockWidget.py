@@ -10,7 +10,6 @@ from qgis.utils import iface
 
 from ...utils.utils import get_maphub_client, handled_exceptions
 from ...utils.map_operations import download_map, add_map_as_tiling_service, add_folder_maps_as_tiling_services, download_folder_maps
-from ..dialogs.MapHubBaseDialog import load_style
 
 
 class WorkspacesLoader(QThread):
@@ -81,11 +80,6 @@ class MapBrowserDockWidget(QDockWidget):
         super(MapBrowserDockWidget, self).__init__("MapHub Browser", parent)
         self.iface = iface
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-
-        # Apply style based on QGIS theme
-        style = load_style()
-        if style:
-            self.setStyleSheet(style)
 
         # Create main widget and layout
         self.main_widget = QWidget()
