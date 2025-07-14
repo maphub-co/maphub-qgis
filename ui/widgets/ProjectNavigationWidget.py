@@ -11,7 +11,7 @@ from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
 from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
-from ..dialogs.MapHubBaseDialog import style
+from ..dialogs.MapHubBaseDialog import load_style
 
 
 class ThumbnailLoader(QThread):
@@ -61,8 +61,9 @@ class ProjectNavigationWidget(QWidget):
         self.setObjectName("projectNavigationWidget")
 
         # Apply the style from style.qss
+        style = load_style()
         if style:
-            self.setStyleSheet(style)
+            self.setStyleSheet(load_style())
 
         # Set up UI
         self.setup_ui()

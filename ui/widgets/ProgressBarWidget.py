@@ -2,7 +2,7 @@ import os
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, 
                             QLabel, QDialog, QApplication)
-from ..dialogs.MapHubBaseDialog import style
+from ..dialogs.MapHubBaseDialog import load_style
 
 class ProgressBarWidget(QWidget):
     """
@@ -40,6 +40,7 @@ class ProgressBarWidget(QWidget):
         self.dialog.setMinimumWidth(300)
 
         # Apply the style sheet
+        style = load_style()
         if style:
             self.dialog.setStyleSheet(style)
 

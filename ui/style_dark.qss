@@ -1,0 +1,293 @@
+/* Base colors from globals.css */
+/* Dark mode - Aligned with Tailwind theme */
+QDialog, QDockWidget, QWidget {
+    background-color: #0e1016; /* --color-black (hsl 225 22% 7%) */
+    color: #f2f2f2; /* --color-white-dark (hsl 0 0% 95%) */
+}
+
+QDockWidget::title {
+    background-color: #1b2437; /* --color-gray-darker (hsl 221 34% 16%) */
+    color: #f2f2f2; /* --color-white-dark */
+    padding: 5px;
+    text-align: center;
+}
+
+QDockWidget::close-button, QDockWidget::float-button {
+    background-color: #1b2437; /* --color-gray-darker */
+    border: none;
+}
+
+QLabel {
+    color: #f2f2f2; /* --color-white-dark */
+    font-size: 12px;
+}
+
+QLabel#label_title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #236ce1; /* --color-blue-primary (hsl 217 76% 51%) */
+    padding: 10px;
+}
+
+QLineEdit, QComboBox, QTextEdit, QSpinBox {
+    border: 1px solid #333333; /* --color-border-dark (hsl 0 0% 20%) */
+    border-radius: 4px;
+    padding: 8px;
+    background-color: #1b2437; /* --color-gray-darker */
+    color: #f2f2f2; /* --color-white-dark */
+    selection-background-color: #236ce1; /* --color-blue-primary */
+}
+
+QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QSpinBox:focus {
+    border: 1px solid #236ce1; /* --color-blue-primary */
+}
+
+QPushButton {
+    background-color: #236ce1; /* --color-blue-primary */
+    color: #f2f2f2; /* --color-white-dark */
+    border: none;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #163567; /* --color-blue-primary-dark (hsl 217 65% 25%) */
+}
+
+QPushButton:pressed {
+    background-color: #163567; /* --color-blue-primary-dark */
+}
+
+QGroupBox {
+    border: 1px solid #333333; /* --color-border-dark */
+    border-radius: 4px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 3px;
+    color: #236ce1; /* --color-blue-primary */
+}
+
+QCheckBox {
+    spacing: 5px;
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+QRadioButton {
+    spacing: 5px;
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QRadioButton::indicator {
+    width: 18px;
+    height: 18px;
+}
+
+/* Additional widgets */
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #1b2437; /* --color-gray-darker */
+    width: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #838a92; /* --color-gray-dark (hsl 217 6% 54%) */
+    min-height: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #1b2437; /* --color-gray-darker */
+    height: 10px;
+    margin: 0px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #838a92; /* --color-gray-dark */
+    min-width: 20px;
+    border-radius: 5px;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+
+QTableWidget {
+    background-color: #1b2437; /* --color-gray-darker */
+    color: #f2f2f2; /* --color-white-dark */
+    gridline-color: #333333; /* --color-border-dark */
+    border: 1px solid #333333; /* --color-border-dark */
+}
+
+QTableWidget::item {
+    padding: 5px;
+}
+
+QTableWidget::item:selected {
+    background-color: #236ce1; /* --color-blue-primary */
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QHeaderView::section {
+    background-color: #333333; /* --color-border-dark */
+    color: #f2f2f2; /* --color-white-dark */
+    padding: 5px;
+    border: 1px solid #1b2437; /* --color-gray-darker */
+}
+
+QListWidget {
+    background-color: #1b2437; /* --color-gray-darker */
+    color: #f2f2f2; /* --color-white-dark */
+    border: 1px solid #333333; /* --color-border-dark */
+}
+
+QListWidget::item {
+    padding: 5px;
+}
+
+QListWidget::item:selected {
+    background-color: #236ce1; /* --color-blue-primary */
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QTreeWidget {
+    background-color: #1b2437; /* --color-gray-darker */
+    color: #f2f2f2; /* --color-white-dark */
+    border: 1px solid #333333; /* --color-border-dark */
+}
+
+QTreeWidget::item {
+    padding: 5px;
+}
+
+QTreeWidget::item:selected {
+    background-color: #236ce1; /* --color-blue-primary */
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QProgressBar {
+    border: 1px solid #333333; /* --color-border-dark */
+    border-radius: 4px;
+    text-align: center;
+    background-color: #1b2437; /* --color-gray-darker */
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QProgressBar::chunk {
+    background-color: #236ce1; /* --color-blue-primary */
+    width: 10px;
+    margin: 0.5px;
+}
+
+QTabWidget::pane {
+    border: 1px solid #333333; /* --color-border-dark */
+    background-color: #1b2437; /* --color-gray-darker */
+}
+
+QTabBar::tab {
+    background-color: #333333; /* --color-border-dark */
+    color: #f2f2f2; /* --color-white-dark */
+    padding: 5px 10px;
+    border: 1px solid #1b2437; /* --color-gray-darker */
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+QTabBar::tab:selected {
+    background-color: #236ce1; /* --color-blue-primary */
+    color: #f2f2f2; /* --color-white-dark */
+}
+
+QTabBar::tab:!selected {
+    margin-top: 2px;
+}
+
+/* Map cards and frames */
+QFrame#map_item_frame {
+    border: 1px solid #333333; /* --color-border-dark */
+    border-radius: 4px;
+    background-color: #1b2437; /* --color-gray-darker */
+    padding: 5px;
+}
+
+/* Project navigation widget */
+#projectNavigationWidget {
+    background-color: transparent;
+}
+
+#navigationFrame {
+    background-color: #1b2437; /* --color-gray-darker */
+    border: 1px solid #333333; /* --color-border-dark */
+    border-radius: 4px;
+}
+
+#currentFolderLabel {
+    font-weight: bold;
+    color: #f2f2f2; /* --color-white-dark */
+    font-size: 12px;
+}
+
+QFrame[objectName^="folderItem_"] {
+    border: 1px solid #333333; /* --color-border-dark */
+    border-radius: 4px;
+    background-color: #0e1016; /* --color-black */
+}
+
+QLabel[objectName^="folderName_"] {
+    font-weight: bold;
+    color: #f2f2f2; /* --color-white-dark */
+    font-size: 12px;
+}
+
+/* Use attribute selector for the selected property */
+QFrame[objectName^="folderItem_"][selected="true"] {
+    border: 1px solid #236ce1; /* --color-blue-primary */
+    border-radius: 4px;
+    background-color: #163567; /* --color-blue-primary-dark */
+}
+
+/* Tag styling */
+QLabel.tag_label {
+    background-color: #1b2437; /* --color-gray-darker */
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: #f2f2f2; /* --color-white-dark */
+    margin-right: 4px;
+}
+
+/* Message boxes */
+QMessageBox {
+    background-color: #0e1016; /* --color-black */
+}
+
+QMessageBox QPushButton {
+    min-width: 80px;
+}

@@ -1,8 +1,20 @@
 /* Base colors from globals.css */
 /* Light mode */
-QDialog {
+QDialog, QDockWidget {
     background-color: #ffffff; /* --color-white */
     color: #0e1016; /* --color-black */
+}
+
+QDockWidget::title {
+    background-color: #f5f7fa; /* Light gray background */
+    color: #0e1016; /* --color-black */
+    padding: 5px;
+    text-align: center;
+}
+
+QDockWidget::close-button, QDockWidget::float-button {
+    background-color: #f5f7fa; /* Light gray background */
+    border: none;
 }
 
 QLabel {
