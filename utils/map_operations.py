@@ -28,7 +28,7 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
         if map_data.get('type') == 'raster':
             selected_format = "tif"
         elif map_data.get('type') == 'vector':
-            selected_format = "gpkg"  # Default to GeoPackage for vector
+            selected_format = "fgb"  # Default to GeoPackage for vector
 
     # Determine file extension and filter based on selected format
     file_extension = f".{selected_format}"
