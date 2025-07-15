@@ -307,7 +307,8 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
                     selected_format = "gpkg"  # Default to GeoPackage for vector
 
             # Create file path
-            file_name = f"{map_data.get('name', f'map_{map_data.get('id')}')}.{selected_format}"
+            map_id = map_data.get('id')
+            file_name = f"{map_data.get('name', f'map_{map_id}')}.{selected_format}"
             file_path = os.path.join(directory, file_name)
 
             # Download the map
