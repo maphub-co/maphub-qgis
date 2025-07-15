@@ -44,8 +44,8 @@ def handled_exceptions(func):
                 )
             elif e.status_code == 402:
                 show_error_dialog(
-                    f"{e.message}\nUpgrade to premium here: https://maphub.co/dashboard/subscription",
-                    "Premium account required."
+                    f"{e.message}\nUpgrade your organization here: https://www.maphub.co/settings/billing",
+                    "Paid plan required."
                 )
             elif e.status_code == 401:
                 show_error_dialog(
