@@ -87,6 +87,7 @@ def get_maphub_client() -> MapHubClient:
 
     return MapHubClient(
         api_key=api_key,
+        x_api_source="qgis-plugin",
     )
 
 

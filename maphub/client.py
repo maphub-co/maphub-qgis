@@ -17,7 +17,7 @@ from .exceptions import APIException, MapHubException
 
 
 class MapHubClient:
-    def __init__(self, api_key: Optional[str], base_url: str = "https://api-main-432878571563.europe-west4.run.app"):
+    def __init__(self, api_key: Optional[str], base_url: str = "https://api-main-432878571563.europe-west4.run.app", x_api_source: str = "python-sdk"):
         self.api_key = api_key
         self.base_url = base_url
 
@@ -26,6 +26,7 @@ class MapHubClient:
 
         if self.api_key:
             self.session.headers.update({
+                "X-API-Source": x_api_source,
                 "X-API-Key": f"{self.api_key}"
             })
 
