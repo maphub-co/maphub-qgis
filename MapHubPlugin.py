@@ -3,10 +3,9 @@
 import os
 import os.path
 
-from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.PyQt.QtWidgets import QAction
 
 from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
 from .ui.dialogs.GetMapDialog import GetMapDialog

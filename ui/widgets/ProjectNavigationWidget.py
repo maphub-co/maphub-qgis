@@ -88,12 +88,6 @@ class ProjectNavigationWidget(QWidget):
 
         Args:
             workspace_id (str): The ID of the workspace to load
-            add_custom_button (Dict[str, Any], optional): Custom button configuration for folder items
-                {
-                    'text': str,
-                    'tooltip': str,
-                    'callback': Callable[[str], None]
-                }
         """
         # Get the root folder for the workspace
         root_folder = get_maphub_client().folder.get_root_folder(workspace_id)
@@ -187,13 +181,6 @@ class ProjectNavigationWidget(QWidget):
 
         Args:
             folder_data (Dict[str, Any]): The folder data
-            add_select_button (bool): Whether to add a select button
-            add_custom_button (Dict[str, Any], optional): Custom button configuration
-                {
-                    'text': str,
-                    'tooltip': str,
-                    'callback': Callable[[str], None]
-                }
         """
         # Create a unique object name for this folder item
         folder_id = folder_data['id']
@@ -581,6 +568,7 @@ class ProjectNavigationWidget(QWidget):
         progress_dialog.setMinimumWidth(300)
 
         # Apply the same style as MapHubBaseDialog
+        style = load_style()
         if style:  # style is imported from MapHubBaseDialog
             progress_dialog.setStyleSheet(style)
 

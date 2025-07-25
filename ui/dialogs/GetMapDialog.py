@@ -3,7 +3,7 @@
 import os
 import requests
 
-from PyQt5 import QtWidgets, uic
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QLabel, QPushButton, QMessageBox)
 from qgis.core import Qgis, QgsProject

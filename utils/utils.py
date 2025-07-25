@@ -118,12 +118,9 @@ def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:
 
     # Get SLD style format
     sld_doc = QDomDocument()
-    sld_document = layer.exportSldStyle(sld_doc, "")
+    layer.exportSldStyle(sld_doc, "")
 
-    if not sld_document:
-        visuals["sld"] = None
-    else:
-        visuals["sld"] = sld_document
+    visuals["sld"] = sld_doc
 
     return visuals
 

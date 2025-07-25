@@ -158,7 +158,7 @@ def add_folder_maps_as_tiling_services(folder_id: str, parent=None) -> Tuple[int
             "No Maps Found",
             "There are no maps in this folder to add as tiling services."
         )
-        return (0, 0)
+        return 0, 0
 
     # Create progress dialog
     progress_dialog = QDialog(parent)
@@ -231,7 +231,7 @@ def add_folder_maps_as_tiling_services(folder_id: str, parent=None) -> Tuple[int
         message
     )
 
-    return (success_count, len(maps))
+    return success_count, len(maps)
 
 
 def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -> Tuple[int, int]:
@@ -258,7 +258,7 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
             "No Maps Found",
             "There are no maps in this folder to download."
         )
-        return (0, 0)
+        return 0, 0
 
     # Ask for directory to save maps
     directory = QFileDialog.getExistingDirectory(
@@ -269,7 +269,7 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
     )
 
     if not directory:
-        return (0, 0)  # User cancelled
+        return 0, 0  # User cancelled
 
     # Create progress dialog
     progress_dialog = QDialog(parent)
@@ -347,4 +347,4 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
         message
     )
 
-    return (success_count, len(maps))
+    return success_count, len(maps)
