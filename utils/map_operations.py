@@ -1,4 +1,7 @@
+import hashlib
+import json
 import os
+from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QProgressBar, QLabel, QVBoxLayout, QDialog, QApplication
@@ -73,6 +76,13 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
     if not layer.isValid():
         raise Exception(f"The downloaded map could not be added as a layer. Please check the file: {file_path}")
     else:
+        # Store MapHub connection information in layer properties
+        layer.setCustomProperty("maphub/map_id", str(map_data['id']))
+        layer.setCustomProperty("maphub/folder_id", str(map_data.get('folder_id', '')))
+        layer.setCustomProperty("maphub/workspace_id", str(map_data.get('workspace_id', '')))
+        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+        layer.setCustomProperty("maphub/local_path", file_path)
+        
         # Apply style if available
         if 'visuals' in map_data and map_data['visuals']:
             visuals = map_data['visuals']
@@ -81,7 +91,7 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
         QMessageBox.information(
             parent,
             "Download Complete",
-            f"Map '{map_data.get('name')}' has been downloaded and added to your layers."
+            f"Map '{map_data.get('name')}' has been downloaded, added to your layers, and connected to MapHub."
         )
 
     return file_path

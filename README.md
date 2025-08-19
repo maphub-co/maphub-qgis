@@ -10,6 +10,7 @@ MapHub is a community hub for GIS users to host, visualize, and share geospatial
 - [x] Browse your MapHub projects
 - [x] Directly view MapHub maps in QGIS via tiling service
 - [x] Download maps from MapHub to use in QGIS
+- [x] Layer-based synchronization between QGIS and MapHub
 - [ ] And much more ...
 
 ## Installation
@@ -22,6 +23,7 @@ MapHub is a community hub for GIS users to host, visualize, and share geospatial
 1. Obtain an API key from your MapHub account
 2. Enter your API key in the plugin settings
 3. Start uploading and downloading maps!
+4. Use the layer-based synchronization to keep your local layers in sync with MapHub (see [documentation](docs/layer_sync.md))
 
 ## Requirements
 - QGIS 3.0 or later

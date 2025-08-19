@@ -1058,12 +1058,22 @@ class MapHubClient:
     def clone(self, folder_id: uuid.UUID, output_dir: Path, file_format: str = None) -> Optional[Path]:
         """
         Clone a folder from MapHub to local directory.
+        
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Please use the layer-based synchronization approach instead.
 
         Args:
             folder_id: ID of the folder to clone
             output_dir: Path to the output directory
             file_format: Defines the file format to be used for downloading the maps
         """
+        import warnings
+        warnings.warn(
+            "The clone method is deprecated and will be removed in a future version. "
+            "Please use the layer-based synchronization approach instead.",
+            DeprecationWarning, 
+            stacklevel=2
+        )
         # Create output directory if it doesn't exist
         output_dir.mkdir(exist_ok=True)
 
@@ -1087,6 +1097,9 @@ class MapHubClient:
         """
         Pull latest changes from MapHub.
 
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Please use the layer-based synchronization approach instead.
+
         This method should be called from within a directory that was previously cloned.
         It will update any maps in the folder that have changed on the server.
 
@@ -1094,6 +1107,13 @@ class MapHubClient:
             root_dir: Root directory of the repository
             file_format: Defines the file format to be used for downloading the maps
         """
+        import warnings
+        warnings.warn(
+            "The pull method is deprecated and will be removed in a future version. "
+            "Please use the layer-based synchronization approach instead.",
+            DeprecationWarning, 
+            stacklevel=2
+        )
         maphub_dir = root_dir / ".maphub"
 
         # Load config
@@ -1133,6 +1153,9 @@ class MapHubClient:
         """
         Push local changes to MapHub.
 
+        DEPRECATED: This method is deprecated and will be removed in a future version.
+        Please use the layer-based synchronization approach instead.
+
         This method should be called from within a directory that was previously cloned.
         It will upload any maps in the folder that have changed locally.
 
@@ -1140,6 +1163,13 @@ class MapHubClient:
             root_dir: Root directory of the repository
             version_description: Optional description for the new version
         """
+        import warnings
+        warnings.warn(
+            "The push method is deprecated and will be removed in a future version. "
+            "Please use the layer-based synchronization approach instead.",
+            DeprecationWarning, 
+            stacklevel=2
+        )
         maphub_dir = root_dir / ".maphub"
 
         # Load config

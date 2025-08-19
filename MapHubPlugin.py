@@ -6,6 +6,7 @@ import os.path
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from qgis.core import QgsProject
 
 from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
 from .ui.dialogs.GetMapDialog import GetMapDialog
@@ -50,6 +51,11 @@ class MapHubPlugin:
         # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&MapHub')
+        
+        # Initialize synchronization components
+        self.layer_decorator = None
+        self.layer_menu_provider = None
+        self.map_browser_dock = None
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -203,6 +209,15 @@ class MapHubPlugin:
             parent=self.iface.mainWindow(),
             add_to_toolbar=True
         )
+        
+        # Add Synchronize button
+        self.add_action(
+            os.path.join(self.plugin_dir, 'icons', 'sync.svg'),
+            text=self.tr(u'Synchronize Layers with MapHub'),
+            callback=self.synchronize_layers,
+            parent=self.iface.mainWindow(),
+            add_to_toolbar=True
+        )
 
         self.add_action(
             os.path.join(self.plugin_dir, 'icon.png'),
@@ -214,6 +229,22 @@ class MapHubPlugin:
 
         # will be set False in run()
         self.first_start = True
+        
+        # Initialize layer decorator and menu provider
+        from .utils.layer_decorator import MapHubLayerDecorator
+        from .utils.layer_menu_provider import MapHubLayerMenuProvider
+        from .utils.sync_manager import MapHubSyncManager
+        
+        self.sync_manager = MapHubSyncManager(self.iface)
+        self.layer_decorator = MapHubLayerDecorator(self.iface)
+        self.layer_menu_provider = MapHubLayerMenuProvider(self.iface, self.sync_manager)
+        
+        # Update layer icons
+        self.layer_decorator.update_layer_icons()
+        
+        # Connect to project events to update layer icons
+        QgsProject.instance().layersAdded.connect(self.on_layers_changed)
+        QgsProject.instance().layersRemoved.connect(self.on_layers_changed)
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -222,6 +253,23 @@ class MapHubPlugin:
                 self.tr(u'&MapHub'),
                 action)
             self.iface.removeToolBarIcon(action)
+            
+        # Disconnect from project events
+        if hasattr(QgsProject.instance(), 'layersAdded'):
+            QgsProject.instance().layersAdded.disconnect(self.on_layers_changed)
+        if hasattr(QgsProject.instance(), 'layersRemoved'):
+            QgsProject.instance().layersRemoved.disconnect(self.on_layers_changed)
+            
+        # Clean up UI components
+        if self.layer_decorator:
+            self.layer_decorator.cleanup()
+            self.layer_decorator = None
+        self.layer_menu_provider = None
+        
+        # Close the map browser dock if it exists
+        if self.map_browser_dock:
+            self.map_browser_dock.close()
+            self.map_browser_dock = None
 
     def check_api_key(self):
         """Check if API key exists, prompt for it if not."""
@@ -281,7 +329,7 @@ class MapHubPlugin:
     @handled_exceptions
     def show_map_browser(self, checked=False):
         """Show the map browser dock widget."""
-        if not hasattr(self, 'map_browser_dock') or self.map_browser_dock is None:
+        if self.map_browser_dock is None:
             self.map_browser_dock = MapBrowserDockWidget(self.iface, self.iface.mainWindow())
             self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.map_browser_dock)
         else:
@@ -300,3 +348,17 @@ class MapHubPlugin:
         dlg.cloneCompleted.connect(on_clone_completed)
 
         result = dlg.exec_()
+        
+    def on_layers_changed(self):
+        """Update layer icons when layers are added or removed."""
+        if self.layer_decorator:
+            self.layer_decorator.update_layer_icons()
+    
+    @handled_exceptions
+    def synchronize_layers(self, checked=False):
+        """Synchronize layers with MapHub."""
+        from .ui.dialogs.SynchronizeLayersDialog import SynchronizeLayersDialog
+        
+        # Create and show the synchronization dialog
+        dialog = SynchronizeLayersDialog(self.iface, self.iface.mainWindow())
+        dialog.exec_()
