@@ -133,7 +133,14 @@ class MapHubLayerDecorator:
 
         # Remove all indicators
         for indicator_id, (node, indicator) in list(self._indicators.items()):
-            layer_tree_view.removeIndicator(node, indicator)
+            try:
+                layer_tree_view.removeIndicator(node, indicator)
+            except RuntimeError:
+                # Node has been deleted, skip it
+                pass
+            except Exception:
+                # Handle any other exceptions
+                pass
 
         # Clear the indicators dictionary
         self._indicators.clear()

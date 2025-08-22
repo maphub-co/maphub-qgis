@@ -5,8 +5,9 @@ from qgis.PyQt import uic
 from qgis.PyQt.QtCore import pyqtSignal, QSettings
 from qgis.PyQt.QtWidgets import QLineEdit, QMessageBox
 
-from ...utils.utils import handled_exceptions, get_maphub_client
+from ...utils.utils import get_maphub_client
 from .MapHubBaseDialog import MapHubBaseDialog
+from ...utils.error_manager import handled_exceptions
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(

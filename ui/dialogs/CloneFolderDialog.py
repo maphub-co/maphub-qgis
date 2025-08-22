@@ -8,14 +8,14 @@ from PyQt5.QtWidgets import (QMessageBox)
 from PyQt5.QtGui import QIcon, QCursor
 from qgis.PyQt import uic, QtWidgets
 from qgis.PyQt.QtWidgets import QFileDialog
-from qgis.core import (QgsCoordinateReferenceSystem, QgsProject, QgsVectorLayer, 
-                      QgsRasterLayer, QgsMapLayer)
+from qgis.core import QgsCoordinateReferenceSystem, QgsProject, QgsVectorLayer, QgsRasterLayer
 
-from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
+from ...utils.utils import get_maphub_client, apply_style_to_layer, place_layer_at_position
 from .MapHubBaseDialog import MapHubBaseDialog
 from .CreateFolderDialog import CreateFolderDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
 from ..widgets.ProgressBarWidget import ProgressBarWidget
+from ...utils.error_manager import handled_exceptions
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(

@@ -5,12 +5,12 @@ from PyQt5.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QTreeWidget,
                             QTreeWidgetItem, QMenu, QAction, QMessageBox)
 from PyQt5.QtGui import QIcon
 
-from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
-from qgis.utils import iface
-
-from ...utils.utils import get_maphub_client, handled_exceptions
+from ...utils.utils import get_maphub_client
 from ...utils.map_operations import download_map, add_map_as_tiling_service, add_folder_maps_as_tiling_services, download_folder_maps
 from ...utils.sync_manager import MapHubSyncManager
+from .MapItemDelegate import MapItemDelegate, STATUS_INDICATOR_ROLE
+from ..dialogs.FolderSyncDialog import FolderSyncDialog
+from ...utils.error_manager import handled_exceptions
 
 
 class WorkspacesLoader(QThread):
@@ -94,6 +94,10 @@ class MapBrowserDockWidget(QDockWidget):
         self.tree_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree_widget.customContextMenuRequested.connect(self.show_context_menu)
         self.tree_widget.itemExpanded.connect(self.on_item_expanded)
+        
+        # Set custom delegate for rendering status indicators
+        self.item_delegate = MapItemDelegate(self.tree_widget)
+        self.tree_widget.setItemDelegate(self.item_delegate)
 
         # Add tree widget to layout
         self.main_layout.addWidget(self.tree_widget)
@@ -326,6 +330,14 @@ class MapBrowserDockWidget(QDockWidget):
             action_tiling_all = QAction("Add All as Tiling Services", self)
             action_tiling_all.triggered.connect(lambda: self.on_tiling_all_clicked(item_id))
             context_menu.addAction(action_tiling_all)
+            
+            # Add separator
+            context_menu.addSeparator()
+            
+            # Add synchronize folder action
+            action_sync_folder = QAction("Synchronize Folder", self)
+            action_sync_folder.triggered.connect(lambda: self.on_sync_folder_clicked(item_id))
+            context_menu.addAction(action_sync_folder)
 
         elif item_type == 'map':
             # Map context menu actions
@@ -387,6 +399,18 @@ class MapBrowserDockWidget(QDockWidget):
     def on_tiling_all_clicked(self, folder_id):
         """Handle click on the tiling all button."""
         add_folder_maps_as_tiling_services(folder_id, self)
+        
+    @handled_exceptions
+    def on_sync_folder_clicked(self, folder_id):
+        """
+        Handle click on the synchronize folder button.
+        
+        Args:
+            folder_id: The ID of the folder to synchronize
+        """
+        # Create and show the folder synchronization dialog
+        dialog = FolderSyncDialog(folder_id, self.iface, self)
+        dialog.exec_()
         
     @handled_exceptions
     def on_sync_clicked(self, map_data, layer):
@@ -477,11 +501,8 @@ class MapBrowserDockWidget(QDockWidget):
                 font.setBold(False)
                 map_item.setFont(0, font)
                 
-                # Remove any status indicators
-                for i in range(map_item.childCount() - 1, -1, -1):
-                    child = map_item.child(i)
-                    if child.data(0, Qt.UserRole) and child.data(0, Qt.UserRole).get('type') == 'status_indicator':
-                        map_item.removeChild(child)
+                # Remove any status indicator data
+                map_item.setData(0, STATUS_INDICATOR_ROLE, None)
                 
     def _add_status_indicator(self, map_item, status):
         """
@@ -513,29 +534,28 @@ class MapBrowserDockWidget(QDockWidget):
         elif status == "in_sync":
             tooltip = "Layer is in sync with MapHub"
         
-        # Create a child item for the status indicator if needed
+        # Set the status indicator data on the item
         if icon_path and os.path.exists(icon_path):
-            # Check if status indicator already exists
-            for i in range(map_item.childCount()):
-                child = map_item.child(i)
-                if child.data(0, Qt.UserRole) and child.data(0, Qt.UserRole).get('type') == 'status_indicator':
-                    # Update existing indicator
-                    child.setIcon(0, QIcon(icon_path))
-                    child.setToolTip(0, tooltip)
-                    return
+            # Store the status data in the item using the custom role
+            status_data = {
+                'icon_path': icon_path,
+                'tooltip': tooltip,
+                'status': status
+            }
+            map_item.setData(0, STATUS_INDICATOR_ROLE, status_data)
             
-            # Create new status indicator
-            status_item = QTreeWidgetItem(map_item)
-            status_item.setIcon(0, QIcon(icon_path))
-            status_item.setText(0, "")  # No text, just icon
-            status_item.setToolTip(0, tooltip)
-            status_item.setData(0, Qt.UserRole, {'type': 'status_indicator', 'status': status})
-            
-            # Make the status indicator not selectable
-            status_item.setFlags(status_item.flags() & ~Qt.ItemIsSelectable)
+            # Set tooltip on the item
+            if tooltip:
+                map_item.setToolTip(0, tooltip)
+                
+            # Force a repaint of the item
+            self.tree_widget.update()
         elif tooltip:
             # Just set tooltip on the map item if no icon
             map_item.setToolTip(0, tooltip)
+            
+            # Clear any existing status indicator data
+            map_item.setData(0, STATUS_INDICATOR_ROLE, None)
     
     def _find_map_item(self, parent_item, map_id):
         """

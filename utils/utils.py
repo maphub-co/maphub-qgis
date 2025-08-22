@@ -1,17 +1,17 @@
-import json
+import sys
 import traceback
 from typing import Dict, Any
 from xml.etree import ElementTree as ET
 
-from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox
+from qgis.core import QgsMapLayer
+from qgis.PyQt.QtCore import QSettings
+from qgis.PyQt.QtWidgets import QMessageBox
 from PyQt5.QtXml import QDomDocument
 
 from ..maphub import MapHubClient
 from ..ui.dialogs.ApiKeyDialog import ApiKeyDialog
 from ..maphub.exceptions import APIException
+from ..utils.error_manager import ErrorManager
 
 
 def show_error_dialog(message, title="Error"):
@@ -29,43 +29,7 @@ def show_error_dialog(message, title="Error"):
     msg_box.exec_()
 
 
-def handled_exceptions(func):
-    """Decorator to handle exceptions."""
-    def wrapper(*args, **kwargs):
-        try:
-            func(*args, **kwargs)
-        except APIException as e:
-            print(traceback.format_exc())
-
-            if e.status_code == 500:
-                show_error_dialog(
-                    "Error from the MapHub server. A Bug report is sent and the issue will be investigated asap.",
-                    "MapHub API Error"
-                )
-            elif e.status_code == 402:
-                show_error_dialog(
-                    f"{e.message}\nUpgrade your organization here: https://www.maphub.co/settings/billing",
-                    "Paid plan required."
-                )
-            elif e.status_code == 401:
-                show_error_dialog(
-                    f"{e.message}\nPlease check your API key and try again.",
-                    "Invalid API key."
-                )
-            elif e.status_code == 403:
-                show_error_dialog(
-                    f"{e.message}\nMake sure the currently used API key has the correct permissions.",
-                    "Permission denied."
-                )
-            else:
-                show_error_dialog(f"Code {e.status_code}: {e.message}", "Error uploading map to MapHub")
-        except Exception as e:
-            print(traceback.format_exc())
-            show_error_dialog(f"{e}", "Error")
-
-    return wrapper
-
-def get_maphub_client() -> MapHubClient:
+def get_maphub_client() -> MapHubClient | None:
     settings = QSettings()
     api_key = settings.value("MapHubPlugin/api_key", "")
 
@@ -82,8 +46,9 @@ def get_maphub_client() -> MapHubClient:
             return None
 
     if api_key is None:
-        return show_error_dialog(
-            "API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it.")
+        ErrorManager.show_error(
+            "API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it."
+        )
 
     return MapHubClient(
         api_key=api_key,
@@ -120,10 +85,9 @@ def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:
     sld_doc = QDomDocument()
     layer.exportSldStyle(sld_doc, "")
 
-    visuals["sld"] = sld_doc
+    visuals["sld"] = sld_doc.toString()
 
     return visuals
-
 
 
 def vector_style_to_tiling_style(style: str) -> str:

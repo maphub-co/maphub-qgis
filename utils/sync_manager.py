@@ -1,12 +1,14 @@
 import hashlib
 import os
+import tempfile
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from PyQt5.QtWidgets import QMessageBox
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
-from .utils import get_maphub_client, apply_style_to_layer
+from ..maphub.exceptions import APIException
+from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json
 
 
 class MapHubSyncManager:
@@ -97,6 +99,12 @@ class MapHubSyncManager:
                 remote_update_time = datetime.fromisoformat(map_info.get('updated_at'))
                 if last_sync and remote_update_time > datetime.fromisoformat(last_sync):
                     return "remote_newer"
+        except APIException as e:
+            print(f"Error checking remote status: {e}")
+            if e.status_code == 404 and "is not processed yet" in e.message:
+                return "processing"
+            else:
+                return "remote_error"
         except Exception as e:
             print(f"Error checking remote status: {e}")
             return "remote_error"
@@ -159,6 +167,9 @@ class MapHubSyncManager:
                 direction = "push"
             elif status == "remote_newer":
                 direction = "pull"
+            elif status == "processing":
+                self.show_error("This map is still being processed by MapHub. Please try again later.")
+                return
             elif status == "style_changed":
                 # For now, just use push direction for style changes
                 # In the future, this would show a style conflict resolution dialog
@@ -179,7 +190,7 @@ class MapHubSyncManager:
                 # Update style if needed
                 style_dict = self.get_layer_style_as_dict(layer)
                 if style_dict:
-                    get_maphub_client().maps.update_map_style(map_id, style_dict)
+                    get_maphub_client().maps.set_visuals(map_id, style_dict)
                 
                 # Update metadata
                 layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
@@ -205,7 +216,7 @@ class MapHubSyncManager:
                     new_layer = self.iface.addVectorLayer(local_path, layer_name, "ogr")
                 
                 # Transfer MapHub properties
-                for key in ["maphub/map_id", "maphub/folder_id", "maphub/workspace_id", "maphub/local_path"]:
+                for key in ["maphub/map_id", "maphub/folder_id", "maphub/local_path"]:
                     new_layer.setCustomProperty(key, layer.customProperty(key))
                 
                 # Get and apply remote style
@@ -220,13 +231,128 @@ class MapHubSyncManager:
                 
         except Exception as e:
             self.show_error(f"Synchronization failed: {str(e)}", e)
+
+
+    def add_layer(self, layer, map_name, folder_id, public=False):
+        # Create a temporary directory to store the files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Get the layer file path
+            layer_path = layer.source()
+            if '|' in layer_path:  # Handle layers with query parameters
+                layer_path = layer_path.split('|')[0]
+
+            # Determine the file extension based on layer type
+            if isinstance(layer, QgsVectorLayer):
+                file_extension = os.path.splitext(layer_path)[1]
+                if not file_extension:
+                    file_extension = '.gpkg'  # Default to GeoPackage
+            elif isinstance(layer, QgsRasterLayer):
+                file_extension = os.path.splitext(layer_path)[1]
+                if not file_extension:
+                    file_extension = '.tif'  # Default to GeoTIFF
+            else:
+                raise Exception("Unsupported layer type.")
+
+            # Create a temporary file path
+            temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
+
+            # Copy the layer file to the temporary directory
+            if os.path.exists(layer_path):
+                # For file-based layers, copy the file
+                with open(layer_path, 'rb') as src_file:
+                    with open(temp_file, 'wb') as dst_file:
+                        dst_file.write(src_file.read())
+
+                # For shapefiles, copy all related files
+                if file_extension.lower() == '.shp':
+                    base_name = os.path.splitext(layer_path)[0]
+                    for ext in ['.dbf', '.shx', '.prj', '.qpj', '.cpg']:
+                        related_file = f"{base_name}{ext}"
+                        if os.path.exists(related_file):
+                            with open(related_file, 'rb') as src_file:
+                                with open(os.path.join(temp_dir, f"{map_name}{ext}"), 'wb') as dst_file:
+                                    dst_file.write(src_file.read())
+            else:
+                # For memory layers or other non-file layers, save to a new file
+                raise Exception("Layer is not file-based. Please save it to a file first.")
+
+            # Get the layer style
+            style_json = get_layer_styles_as_json(layer, {})
+
+            # Upload the map to MapHub
+            client = get_maphub_client()
+            result = client.maps.upload_map(
+                map_name,
+                folder_id,
+                public=public,
+                path=temp_file
+            )
+
+            # Get the map ID from the result
+            map_id = result.get('map_id')
+
+            # Update the layer visuals with the uploaded map style
+            client.maps.set_visuals(map_id, style_json)
+
+            # Connect the layer to the uploaded map
+            if map_id:
+                # Get the layer's source path
+                source_path = layer.source()
+                if '|' in source_path:  # Handle layers with query parameters
+                    source_path = source_path.split('|')[0]
+
+                # Connect the layer to MapHub
+                self.connect_layer(
+                    layer,
+                    map_id,
+                    folder_id,
+                    source_path
+                )
+
+    def connect_layer(self, layer, map_id, folder_id, local_path):
+        """
+        Connect a layer to a MapHub map.
+        
+        This method stores connection information in the layer's custom properties,
+        establishing a link between the local QGIS layer and a remote MapHub map.
+        
+        Args:
+            layer: The QGIS layer to connect
+            map_id: The MapHub map ID
+            folder_id: The MapHub folder ID
+            workspace_id: The MapHub workspace ID
+            local_path: The local file path
+            
+        Returns:
+            None
+            
+        Raises:
+            ValueError: If any of the required parameters are invalid
+        """
+        # Store MapHub connection information in layer properties
+        layer.setCustomProperty("maphub/map_id", str(map_id))
+        layer.setCustomProperty("maphub/folder_id", str(folder_id))
+        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+        layer.setCustomProperty("maphub/local_path", local_path)
+        
+        self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' connected to MapHub.")
     
     def disconnect_layer(self, layer):
         """
         Disconnect a layer from MapHub.
         
+        This method removes all MapHub connection information from the layer's
+        custom properties, effectively breaking the link between the local QGIS
+        layer and the remote MapHub map.
+        
         Args:
-            layer: The QGIS layer
+            layer: The QGIS layer to disconnect
+            
+        Returns:
+            None
+            
+        Raises:
+            None
         """
         if not layer.customProperty("maphub/map_id"):
             return
@@ -248,14 +374,5 @@ class MapHubSyncManager:
             message: The error message
             exception: The exception that caused the error (optional)
         """
-        error_dialog = QMessageBox(QMessageBox.Critical, "Error", message)
-        
-        if exception:
-            details = str(exception)
-            if hasattr(exception, '__traceback__'):
-                import traceback
-                details = ''.join(traceback.format_exception(type(exception), exception, exception.__traceback__))
-            
-            error_dialog.setDetailedText(details)
-        
-        error_dialog.exec_()
+        from .error_handling import ErrorManager
+        ErrorManager.show_error(message, exception)

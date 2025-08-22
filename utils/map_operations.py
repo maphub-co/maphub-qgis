@@ -76,12 +76,15 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
     if not layer.isValid():
         raise Exception(f"The downloaded map could not be added as a layer. Please check the file: {file_path}")
     else:
-        # Store MapHub connection information in layer properties
-        layer.setCustomProperty("maphub/map_id", str(map_data['id']))
-        layer.setCustomProperty("maphub/folder_id", str(map_data.get('folder_id', '')))
-        layer.setCustomProperty("maphub/workspace_id", str(map_data.get('workspace_id', '')))
-        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
-        layer.setCustomProperty("maphub/local_path", file_path)
+        # Connect the layer to MapHub
+        from .sync_manager import MapHubSyncManager
+        sync_manager = MapHubSyncManager(iface)
+        sync_manager.connect_layer(
+            layer,
+            map_data['id'],
+            map_data.get('folder_id', ''),
+            file_path
+        )
         
         # Apply style if available
         if 'visuals' in map_data and map_data['visuals']:

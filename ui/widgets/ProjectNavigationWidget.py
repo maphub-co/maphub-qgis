@@ -5,13 +5,15 @@ from PyQt5.QtCore import Qt, pyqtSignal, QThread, QByteArray
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFrame, 
                             QPushButton, QLabel, QSpacerItem, QSizePolicy,
                             QComboBox, QApplication, QDialog, QFileDialog, QMessageBox,
-                            QProgressBar)
+                            QProgressBar, QScrollArea)
 from PyQt5.QtGui import QIcon, QCursor, QPixmap, QColor
 from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
-from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, place_layer_at_position
+from ...utils.utils import get_maphub_client, apply_style_to_layer, place_layer_at_position
 from ..dialogs.MapHubBaseDialog import load_style
+from ..dialogs.CreateFolderDialog import CreateFolderDialog
+from ...utils.error_manager import handled_exceptions
 
 
 class ThumbnailLoader(QThread):
@@ -47,7 +49,7 @@ class ProjectNavigationWidget(QWidget):
     folder_clicked = pyqtSignal(str)
     folder_selected = pyqtSignal(str)
 
-    def __init__(self, parent=None, folder_select_mode=True):
+    def __init__(self, parent=None, folder_select_mode=True, default_folder_id=None):
         super(ProjectNavigationWidget, self).__init__(parent)
 
         # Initialize state
@@ -55,6 +57,7 @@ class ProjectNavigationWidget(QWidget):
         self.selected_folder_id: Optional[str] = None
         self.custom_button_config: Optional[Dict[str, Any]] = None
         self.folder_select_mode: bool = folder_select_mode
+        self.default_folder_id: Optional[str] = default_folder_id
         self.thumb_loaders = []
 
         # Set widget styling
@@ -75,12 +78,25 @@ class ProjectNavigationWidget(QWidget):
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(5)
 
+        # Create a scroll area for the folder list
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        # self.scroll_area.setFixedHeight(250)  # Set fixed height for the scroll area
+        
+        # Create a widget to hold the list layout
+        self.scroll_content = QWidget()
+        
         # List layout for folders
-        self.list_layout = QVBoxLayout()
+        self.list_layout = QVBoxLayout(self.scroll_content)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(5)
-
-        self.main_layout.addLayout(self.list_layout)
+        
+        # Set the content widget for the scroll area
+        self.scroll_area.setWidget(self.scroll_content)
+        
+        # Add the scroll area to the main layout
+        self.main_layout.addWidget(self.scroll_area)
 
     def set_workspace(self, workspace_id: str):
         """
@@ -96,8 +112,12 @@ class ProjectNavigationWidget(QWidget):
         # Reset folder history
         self.folder_history = [folder_id]
 
-        # Load folder contents
-        self.load_folder_contents(folder_id)
+        # If we have a default folder, navigate to it
+        if self.default_folder_id:
+            self.navigate_to_default_folder()
+        else:
+            # Otherwise, load the root folder contents
+            self.load_folder_contents(folder_id)
 
     def load_folder_contents(self, folder_id: str):
         """
@@ -126,6 +146,9 @@ class ProjectNavigationWidget(QWidget):
             maps = folder_details.get("map_infos", [])
             for map_data in maps:
                 self.add_map_item(map_data)
+                
+        # Add stretch at the end to prevent items from expanding
+        self.list_layout.addStretch(1)
 
     def clear_list_layout(self):
         """Clear all widgets from the list layout"""
@@ -138,9 +161,14 @@ class ProjectNavigationWidget(QWidget):
 
         # Clear widgets
         for i in reversed(range(self.list_layout.count())):
-            widget = self.list_layout.itemAt(i).widget()
+            item = self.list_layout.itemAt(i)
+            # Check if it's a widget (not a spacer/stretcher)
+            widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+            # If it's a spacer/stretcher, remove it too
+            elif item.spacerItem() is not None:
+                self.list_layout.removeItem(item)
 
     def add_navigation_controls(self):
         """Add navigation controls for folder browsing"""
@@ -171,6 +199,12 @@ class ProjectNavigationWidget(QWidget):
         # Add spacer
         nav_layout.addItem(QSpacerItem(
             40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+            
+        # Add "Create Folder" button
+        btn_create_folder = QPushButton("Create Folder")
+        btn_create_folder.setToolTip("Create a new folder in the current location")
+        btn_create_folder.clicked.connect(self.on_create_folder_clicked)
+        nav_layout.addWidget(btn_create_folder)
 
         # Add to layout
         self.list_layout.addWidget(nav_frame)
@@ -538,7 +572,64 @@ class ProjectNavigationWidget(QWidget):
         if self.folder_history:
             return self.folder_history[-1]
         return None
+        
+    def navigate_to_default_folder(self):
+        """
+        Navigate to the default folder if one is specified.
+        This should be called after a workspace is set.
+        """
+        if not self.default_folder_id:
+            return
+            
+        try:
+            # Get folder details to verify it exists
+            client = get_maphub_client()
+            folder_details = client.folder.get_folder(self.default_folder_id)
+            
+            if folder_details:
+                # Update folder history to include the default folder
+                # First, make sure we have a root folder in history
+                if not self.folder_history:
+                    # If no workspace was set, we need to get a root folder
+                    root_folder = client.folder.get_root_folder()
+                    self.folder_history = [root_folder["folder"]["id"]]
+                
+                # Add the default folder to history if it's not the same as the root
+                if self.folder_history[-1] != self.default_folder_id:
+                    self.folder_history.append(self.default_folder_id)
+                
+                # Load the folder contents
+                self.load_folder_contents(self.default_folder_id)
+                
+                # Set it as the selected folder
+                self.selected_folder_id = self.default_folder_id
+        except Exception as e:
+            # Log the error and continue as if no default folder was provided
+            import logging
+            logging.error(f"Error navigating to default folder {self.default_folder_id}: {str(e)}")
 
+    @handled_exceptions
+    def on_create_folder_clicked(self, checked=False):
+        """Handle click on the Create Folder button"""
+        # Get the current folder ID
+        if not self.folder_history:
+            return
+            
+        current_folder_id = self.folder_history[-1]
+
+        client = get_maphub_client()
+        folder_details = client.folder.get_folder(current_folder_id)
+        workspace_id = folder_details["folder"]["workspace_id"]
+
+        # Create and show the CreateFolderDialog
+        dialog = CreateFolderDialog(parent=self, workspace_id=workspace_id, parent_folder_id=current_folder_id)
+        result = dialog.exec_()
+
+        # If the dialog was accepted and a folder was created, refresh the view
+        if result == QDialog.Accepted and dialog.folder:
+            # Refresh the current folder view to show the new folder
+            self.load_folder_contents(current_folder_id)
+    
     @handled_exceptions
     def on_tiling_all_clicked(self, folder_id):
         """Add all maps in a folder as tiling services"""

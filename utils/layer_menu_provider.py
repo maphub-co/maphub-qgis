@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import QMenu, QAction, QMessageBox
 from PyQt5.QtCore import Qt
 
 from .sync_manager import MapHubSyncManager
+from ..ui.dialogs.ConfirmSyncDialog import ConfirmSyncDialog
 
 
 class MapHubLayerMenuProvider:
@@ -114,11 +115,11 @@ class MapHubLayerMenuProvider:
             # Add appropriate actions based on status
             if status == "local_modified":
                 update_remote_action = QAction("Upload to MapHub", menu)
-                update_remote_action.triggered.connect(lambda: self.sync_manager.synchronize_layer(layer, "push"))
+                update_remote_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Upload local changes to MapHub", "push"))
                 menu.addAction(update_remote_action)
             elif status == "remote_newer":
                 update_local_action = QAction("Update from MapHub", menu)
-                update_local_action.triggered.connect(lambda: self.sync_manager.synchronize_layer(layer, "pull"))
+                update_local_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Download remote changes from MapHub", "pull"))
                 menu.addAction(update_local_action)
             elif status == "style_changed":
                 resolve_style_action = QAction("Resolve Style Differences", menu)
@@ -127,7 +128,7 @@ class MapHubLayerMenuProvider:
                 
             # Always add these options
             sync_action = QAction("Synchronize with MapHub", menu)
-            sync_action.triggered.connect(lambda: self.sync_manager.synchronize_layer(layer))
+            sync_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Synchronize with MapHub", "auto"))
             menu.addAction(sync_action)
             
             disconnect_action = QAction("Disconnect from MapHub", menu)
@@ -220,3 +221,25 @@ class MapHubLayerMenuProvider:
             # Disconnect the layers
             for layer in layers:
                 self.sync_manager.disconnect_layer(layer)
+                
+    def confirm_sync_action(self, layer, action_description, direction):
+        """
+        Show confirmation dialog and perform synchronization if confirmed.
+        
+        Args:
+            layer: The QGIS layer to synchronize
+            action_description: Description of the action to perform
+            direction: The synchronization direction ("push", "pull", or "auto")
+        """
+        # Show confirmation dialog
+        dialog = ConfirmSyncDialog(layer.name(), action_description, self.iface.mainWindow())
+        result = dialog.exec_()
+        
+        if result == dialog.Accepted:
+            # Perform synchronization
+            self.sync_manager.synchronize_layer(layer, direction)
+            
+            # Update layer icons
+            from .layer_decorator import MapHubLayerDecorator
+            layer_decorator = MapHubLayerDecorator(self.iface)
+            layer_decorator.update_layer_icons()

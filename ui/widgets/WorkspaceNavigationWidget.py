@@ -1,4 +1,5 @@
 from typing import Optional
+import logging
 
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -28,12 +29,13 @@ class WorkspaceNavigationWidget(QWidget):
     folder_clicked = pyqtSignal(str)
     folder_selected = pyqtSignal(str)
 
-    def __init__(self, parent=None, folder_select_mode=True):
+    def __init__(self, parent=None, folder_select_mode=True, default_folder_id=None):
         super(WorkspaceNavigationWidget, self).__init__(parent)
 
         # Initialize state
         self.selected_workspace_id: Optional[str] = None
         self.folder_select_mode: bool = folder_select_mode
+        self.default_folder_id: Optional[str] = default_folder_id
 
         # Set up UI
         self.setup_ui()
@@ -45,6 +47,10 @@ class WorkspaceNavigationWidget(QWidget):
 
         # Populate workspaces
         self._populate_workspaces_combobox()
+        
+        # If a default folder ID is provided, try to navigate to it
+        if self.default_folder_id:
+            self.set_default_folder(self.default_folder_id)
 
     def setup_ui(self):
         """Set up the widget UI"""
@@ -75,8 +81,12 @@ class WorkspaceNavigationWidget(QWidget):
         separator.setFrameShadow(QFrame.Sunken)
         self.main_layout.addWidget(separator)
 
-        # Create project navigation widget
-        self.project_nav_widget = ProjectNavigationWidget(self, self.folder_select_mode)
+        # Create project navigation widget with default folder
+        self.project_nav_widget = ProjectNavigationWidget(
+            self, 
+            self.folder_select_mode,
+            self.default_folder_id
+        )
         self.main_layout.addWidget(self.project_nav_widget)
 
     def _populate_workspaces_combobox(self):
@@ -154,3 +164,53 @@ class WorkspaceNavigationWidget(QWidget):
             folder_id (str): The ID of the folder to load
         """
         self.project_nav_widget.load_folder_contents(folder_id)
+        
+    def set_default_folder(self, folder_id: str):
+        """
+        Set a default folder and navigate to it, adjusting the workspace if needed.
+        
+        This method will:
+        1. Try to get the folder details to find its workspace
+        2. Select the appropriate workspace in the dropdown
+        3. Navigate to the folder
+        
+        If the folder cannot be found, it will log an error and continue as if no default folder was provided.
+        
+        Args:
+            folder_id (str): The ID of the folder to set as default
+        """
+        try:
+            # Get folder details to find its workspace
+            client = get_maphub_client()
+            folder_details = client.folder.get_folder(folder_id)
+            
+            # Check if folder details contain workspace_id
+            if folder_details and 'folder' in folder_details and 'workspace_id' in folder_details['folder']:
+                workspace_id = folder_details['folder']['workspace_id']
+                
+                # Find the index of this workspace in the combobox
+                for i in range(self.comboBox_workspace.count()):
+                    if self.comboBox_workspace.itemData(i) == workspace_id:
+                        # Select this workspace (this will trigger on_workspace_selected)
+                        self.comboBox_workspace.setCurrentIndex(i)
+                        
+                        # After workspace is loaded, navigate to the folder
+                        self.load_folder_contents(folder_id)
+                        
+                        # Also set it as the selected folder
+                        self.project_nav_widget.selected_folder_id = folder_id
+                        
+                        return
+                
+                # If we get here, the workspace was not found in the combobox
+                logging.warning(f"Workspace {workspace_id} for folder {folder_id} not found in available workspaces")
+            else:
+                logging.warning(f"Could not determine workspace for folder {folder_id}")
+                
+        except Exception as e:
+            # Log the error and continue as if no default folder was provided
+            logging.error(f"Error setting default folder {folder_id}: {str(e)}")
+            
+            # Select the first workspace if available
+            if self.comboBox_workspace.count() > 0:
+                self.comboBox_workspace.setCurrentIndex(0)

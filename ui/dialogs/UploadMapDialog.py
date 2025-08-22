@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import tempfile
+from datetime import datetime
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
@@ -9,8 +10,9 @@ from qgis.PyQt.QtGui import QIcon, QCursor
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
-from ...utils.utils import get_maphub_client, handled_exceptions, get_layer_styles_as_json
+from ...utils.utils import get_maphub_client, get_layer_styles_as_json
 from .MapHubBaseDialog import MapHubBaseDialog
+from ...utils.error_manager import handled_exceptions
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'UploadMapDialog.ui'))
@@ -282,14 +284,6 @@ class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
         if not self.selected_folder_id:
             raise Exception("No folder selected.")
 
-        # Get the map description
-        map_description = self.textEdit_description.toPlainText().strip()
-
-        # Get the map tags
-        map_tags = []
-        if self.lineEdit_tags.text().strip():
-            map_tags = [tag.strip() for tag in self.lineEdit_tags.text().split(',') if tag.strip()]
-
         # Get the map privacy setting
         is_public = self.checkBox_public.isChecked()
 
@@ -341,21 +335,48 @@ class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
             # Upload the map to MapHub
             client = get_maphub_client()
             result = client.maps.upload_map(
-                temp_file,
-                self.selected_folder_id,
                 map_name,
-                description=map_description,
-                tags=map_tags,
-                is_public=is_public,
-                visuals=style_json
+                self.selected_folder_id,
+                public=is_public,
+                path=temp_file
             )
+            
+            # Get the map ID from the result
+            map_id = result.get('map_id')
 
-            # Show success message
-            QtWidgets.QMessageBox.information(
-                self,
-                "Upload Successful",
-                f"Map '{map_name}' has been uploaded to MapHub."
-            )
+            # Update the layer visuals with the uploaded map style
+            client.maps.set_visuals(map_id, style_json)
+            
+            # Connect the layer to the uploaded map
+            if map_id:
+                # Get the layer's source path
+                source_path = layer.source()
+                if '|' in source_path:  # Handle layers with query parameters
+                    source_path = source_path.split('|')[0]
+                
+                # Connect the layer to MapHub
+                from ...utils.sync_manager import MapHubSyncManager
+                sync_manager = MapHubSyncManager(self.iface)
+                sync_manager.connect_layer(
+                    layer,
+                    map_id,
+                    self.selected_folder_id,
+                    source_path
+                )
+                
+                # Show success message with connection information
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Upload Successful",
+                    f"Map '{map_name}' has been uploaded to MapHub and connected to the selected layer."
+                )
+            else:
+                # Show success message without connection information
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Upload Successful",
+                    f"Map '{map_name}' has been uploaded to MapHub."
+                )
 
             # Close the dialog
             self.accept()

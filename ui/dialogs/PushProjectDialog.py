@@ -13,8 +13,9 @@ from qgis.core import (
 )
 
 from .CloneFolderDialog import CloneFolderDialog
-from ...utils.utils import get_maphub_client, apply_style_to_layer, handled_exceptions, get_layer_styles_as_json, layer_position, place_layer_at_position
+from ...utils.utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, layer_position, place_layer_at_position
 from .MapHubBaseDialog import MapHubBaseDialog
+from ...utils.error_manager import handled_exceptions
 
 # This loads your .ui file so that PyQt can populate your plugin with the elements from Qt Designer
 FORM_CLASS, _ = uic.loadUiType(os.path.join(

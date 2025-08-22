@@ -11,12 +11,14 @@ from qgis.core import QgsProject
 from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
 from .ui.dialogs.GetMapDialog import GetMapDialog
 from .ui.dialogs.CreateFolderDialog import CreateFolderDialog
-from .utils.utils import handled_exceptions
 from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
+from .ui.dialogs.SettingsDialog import SettingsDialog
 from .ui.dialogs.UploadMapDialog import UploadMapDialog
 from .ui.dialogs.PullProjectDialog import PullProjectDialog
 from .ui.dialogs.PushProjectDialog import PushProjectDialog
 from .ui.widgets.MapBrowserDockWidget import MapBrowserDockWidget
+from .utils.scheduler_manager import SchedulerManager
+from .utils.error_manager import handled_exceptions
 
 
 
@@ -56,6 +58,7 @@ class MapHubPlugin:
         self.layer_decorator = None
         self.layer_menu_provider = None
         self.map_browser_dock = None
+        self.status_update_scheduler = None
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -167,7 +170,7 @@ class MapHubPlugin:
             text=self.tr(u'Upload to MapHub'),
             callback=self.upload_map,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=False
+            add_to_toolbar=True
         )
 
         self.add_action(
@@ -191,7 +194,7 @@ class MapHubPlugin:
             text=self.tr(u'Clone Project From MapHub'),
             callback=self.clone_project,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=True
+            add_to_toolbar=False
         )
 
         self.add_action(
@@ -199,7 +202,7 @@ class MapHubPlugin:
             text=self.tr(u'Pull Project from MapHub'),
             callback=self.pull_project,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=True
+            add_to_toolbar=False
         )
 
         self.add_action(
@@ -207,7 +210,7 @@ class MapHubPlugin:
             text=self.tr(u'Push Project to MapHub'),
             callback=self.push_project,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=True
+            add_to_toolbar=False
         )
         
         # Add Synchronize button
@@ -224,6 +227,15 @@ class MapHubPlugin:
             text=self.tr(u'MapHub Browser'),
             callback=self.show_map_browser,
             parent=self.iface.mainWindow(),
+            add_to_toolbar=True
+        )
+        
+        # Add settings action
+        self.add_action(
+            os.path.join(self.plugin_dir, 'icons', 'settings.svg'),
+            text=self.tr(u'Settings'),
+            callback=self.show_settings,
+            parent=self.iface.mainWindow(),
             add_to_toolbar=False
         )
 
@@ -238,6 +250,9 @@ class MapHubPlugin:
         self.sync_manager = MapHubSyncManager(self.iface)
         self.layer_decorator = MapHubLayerDecorator(self.iface)
         self.layer_menu_provider = MapHubLayerMenuProvider(self.iface, self.sync_manager)
+        
+        # Initialize the status update scheduler
+        self.initialize_status_update_scheduler()
         
         # Update layer icons
         self.layer_decorator.update_layer_icons()
@@ -265,6 +280,11 @@ class MapHubPlugin:
             self.layer_decorator.cleanup()
             self.layer_decorator = None
         self.layer_menu_provider = None
+        
+        # Stop and clean up the scheduler
+        if self.status_update_scheduler:
+            self.status_update_scheduler.stop_periodic_updates()
+            self.status_update_scheduler = None
         
         # Close the map browser dock if it exists
         if self.map_browser_dock:
@@ -332,6 +352,10 @@ class MapHubPlugin:
         if self.map_browser_dock is None:
             self.map_browser_dock = MapBrowserDockWidget(self.iface, self.iface.mainWindow())
             self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.map_browser_dock)
+            
+            # Refresh the browser dock immediately to ensure it's up to date
+            if self.status_update_scheduler:
+                self.status_update_scheduler.execute_now()
         else:
             # If the dock widget exists but is hidden, show it
             self.map_browser_dock.setVisible(True)
@@ -362,3 +386,58 @@ class MapHubPlugin:
         # Create and show the synchronization dialog
         dialog = SynchronizeLayersDialog(self.iface, self.iface.mainWindow())
         dialog.exec_()
+        
+    def initialize_status_update_scheduler(self):
+        """Initialize the status update scheduler."""
+        # Create the scheduler with the refresh function
+        self.status_update_scheduler = SchedulerManager(lambda: self.refresh_status())
+        
+        # Apply settings from QSettings
+        settings = QSettings()
+        enable_periodic = settings.value("MapHubPlugin/enable_periodic_updates", False, type=bool)
+        if enable_periodic:
+            update_interval = settings.value("MapHubPlugin/update_interval", 5, type=int)
+            # Convert minutes to milliseconds
+            interval_ms = update_interval * 60 * 1000
+            self.status_update_scheduler.start_periodic_updates(interval_ms)
+    
+    @handled_exceptions
+    def show_settings(self, checked=False):
+        """Show the settings dialog."""
+        # Create the settings dialog with callbacks
+        dialog = SettingsDialog(
+            self.iface, 
+            self.iface.mainWindow(),
+            refresh_callback=self.refresh_status,
+            on_settings_changed=self.apply_scheduler_settings
+        )
+        
+        # Show the dialog
+        dialog.exec_()
+    
+    def apply_scheduler_settings(self):
+        """Apply scheduler settings from QSettings."""
+        settings = QSettings()
+        enable_periodic = settings.value("MapHubPlugin/enable_periodic_updates", False, type=bool)
+        update_interval = settings.value("MapHubPlugin/update_interval", 5, type=int)
+        
+        if enable_periodic and self.status_update_scheduler:
+            # Convert minutes to milliseconds
+            interval_ms = update_interval * 60 * 1000
+            self.status_update_scheduler.start_periodic_updates(interval_ms)
+        elif self.status_update_scheduler:
+            self.status_update_scheduler.stop_periodic_updates()
+    
+    def refresh_status(self):
+        """Refresh all MapHub status icons and browser items."""
+        # Update layer icons in the layers panel
+        if self.layer_decorator:
+            self.layer_decorator.update_layer_icons()
+
+        # Update browser dock icons if available
+        if self.map_browser_dock:
+            # Refresh all connected maps in the browser
+            for layer in QgsProject.instance().mapLayers().values():
+                map_id = layer.customProperty("maphub/map_id")
+                if map_id and self.map_browser_dock:
+                    self.map_browser_dock.refresh_map_item(map_id)

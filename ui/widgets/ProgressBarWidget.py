@@ -1,7 +1,5 @@
-import os
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QProgressBar, 
-                            QLabel, QDialog, QApplication)
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QProgressBar, QLabel, QDialog, QApplication
+
 from ..dialogs.MapHubBaseDialog import load_style
 
 class ProgressBarWidget(QWidget):

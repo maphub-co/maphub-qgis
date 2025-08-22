@@ -1,25 +1,23 @@
 # -*- coding: utf-8 -*-
 
 import os
-import requests
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QLabel, QPushButton, QMessageBox)
-from qgis.core import Qgis, QgsProject
-from qgis.utils import iface
+from PyQt5.QtWidgets import QLabel, QPushButton, QMessageBox
 
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import pyqtSignal, QSettings, Qt, QByteArray
-from qgis.PyQt.QtGui import QColor, QPixmap
-from qgis.PyQt.QtWidgets import QLineEdit, QFileDialog, QMessageBox
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtGui import QColor
+from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
-from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject, QgsDataSourceUri
+from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject
 
-from ...utils.utils import get_maphub_client, handled_exceptions, apply_style_to_layer
+from ...utils.utils import get_maphub_client, apply_style_to_layer
 from .MapHubBaseDialog import MapHubBaseDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
+from ...utils.error_manager import handled_exceptions
 
 
 class ThumbnailLoader(QThread):
