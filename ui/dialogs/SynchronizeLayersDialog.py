@@ -1,6 +1,6 @@
 import os
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QDialog
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QDialog, QPushButton
 from PyQt5.QtGui import QBrush, QColor
 from qgis.PyQt import uic
 from qgis.core import QgsProject
@@ -42,13 +42,15 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         self.sync_manager = MapHubSyncManager(iface)
         
         # Configure tree widget
-        self.layersTree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.layersTree.header().setSectionResizeMode(1, QHeaderView.Stretch)
         
         # Connect signals
         self.syncButton.clicked.connect(self.on_sync_clicked)
         self.selectAllButton.clicked.connect(self.on_select_all_clicked)
         self.selectNoneButton.clicked.connect(self.on_select_none_clicked)
-        self.batchConnectButton.clicked.connect(self.on_batch_connect_clicked)
+        
+        # Hide the top batch connect button as we'll add it to the header
+        self.batchConnectButton.hide()
         
         # Populate the tree with all layers
         self.populate_layers()
@@ -56,23 +58,41 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
     def on_select_all_clicked(self):
         """Handle click on the Select All button."""
         for i in range(self.layersTree.topLevelItemCount()):
-            item = self.layersTree.topLevelItem(i)
-            checkbox = self.layersTree.itemWidget(item, 4)
-            if checkbox and not checkbox.isEnabled():
-                continue
-            if checkbox:
-                checkbox.setChecked(True)
+            group_item = self.layersTree.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                child_item = group_item.child(j)
+                checkbox = self.layersTree.itemWidget(child_item, 2)
+                if checkbox and checkbox.isEnabled():
+                    checkbox.setChecked(True)
     
     def on_select_none_clicked(self):
         """Handle click on the Select None button."""
         for i in range(self.layersTree.topLevelItemCount()):
-            item = self.layersTree.topLevelItem(i)
-            checkbox = self.layersTree.itemWidget(item, 4)
-            if checkbox:
-                checkbox.setChecked(False)
+            group_item = self.layersTree.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                child_item = group_item.child(j)
+                checkbox = self.layersTree.itemWidget(child_item, 2)
+                if checkbox:
+                    checkbox.setChecked(False)
         
+    def refresh_tree(self):
+        """Force the tree widget to refresh and update all items."""
+        # This helps ensure all widgets (like checkboxes) are properly displayed
+        self.layersTree.update()
+        # Collapse and re-expand items to force redraw
+        for i in range(self.layersTree.topLevelItemCount()):
+            item = self.layersTree.topLevelItem(i)
+            if item.childCount() > 0:  # Only process items with children
+                was_expanded = item.isExpanded()
+                if was_expanded:
+                    item.setExpanded(False)
+                    item.setExpanded(True)
+
     def populate_layers(self):
-        """Populate the tree widget with all layers."""
+        """Populate the tree widget with all layers grouped by sync status."""
+        # Clear existing items
+        self.layersTree.clear()
+        
         # Get all layers from the project
         all_layers = QgsProject.instance().mapLayers().values()
         
@@ -85,67 +105,169 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             self.reject()
             return
         
-        # Add layers to tree
+        # Create dictionaries to store layers by status
+        download_layers = []  # remote_newer
+        upload_layers = []    # local_modified, style_changed
+        not_connected_layers = []
+        in_sync_layers = []   # in_sync, file_missing, remote_error, processing
+        
+        # Categorize layers by status
         for layer in all_layers:
-            item = QTreeWidgetItem(self.layersTree)
-            item.setText(0, layer.name())
-            
-            # Check if layer is connected to MapHub
             is_connected = layer.customProperty("maphub/map_id") is not None
             
-            if is_connected:
-                # Get synchronization status
-                status = self.sync_manager.get_layer_sync_status(layer)
-                
-                # Set local status column
-                if status in ["local_modified", "style_changed"]:
-                    self._add_status_icon(item, 1, status)
-                
-                # Set remote status column
-                if status in ["remote_newer", "processing"]:
-                    self._add_status_icon(item, 2, status)
-                
-                # Set action based on status
-                if status == "local_modified":
-                    item.setText(3, "Upload to MapHub")
-                elif status == "remote_newer":
-                    item.setText(3, "Download from MapHub")
-                elif status == "processing":
-                    item.setText(3, "Processing on MapHub")
-                elif status == "style_changed":
-                    # Add style resolution combo box
-                    style_combo = QComboBox()
-                    style_combo.addItems(["Keep Local Style", "Use Remote Style"])
-                    self.layersTree.setItemWidget(item, 3, style_combo)
-                elif status == "in_sync":
-                    item.setText(3, "In Sync")
-                elif status == "file_missing":
-                    item.setText(3, "File Missing")
-                elif status == "remote_error":
-                    item.setText(3, "Remote Error")
-                
-                # Add checkbox for selection
-                checkbox = QCheckBox()
-                checkbox.setChecked(False)
-                # Disable checkbox for layers that can't be synchronized
-                if status in ["in_sync", "file_missing", "remote_error", "processing"]:
-                    checkbox.setEnabled(False)
-                self.layersTree.setItemWidget(item, 4, checkbox)
-            else:
-                # Non-connected layer - gray out the text
-                for col in range(5):
-                    item.setForeground(col, QBrush(QColor(128, 128, 128)))
-                
-                # Add "Not Connected" text in the action column
-                item.setText(3, "Not Connected")
-                
-                # Add disabled checkbox
-                checkbox = QCheckBox()
-                checkbox.setEnabled(False)
-                self.layersTree.setItemWidget(item, 4, checkbox)
+            if not is_connected:
+                not_connected_layers.append(layer)
+                continue
             
-            # Store layer reference
-            item.setData(0, Qt.UserRole, layer)
+            status = self.sync_manager.get_layer_sync_status(layer)
+            
+            if status == "remote_newer":
+                download_layers.append((layer, status))
+            elif status in ["local_modified", "style_changed"]:
+                upload_layers.append((layer, status))
+            else:
+                in_sync_layers.append((layer, status))
+        
+        # Define group headers with colors
+        groups = [
+            {
+                "title": "LAYERS TO DOWNLOAD (Accept Remote Changes)",
+                "layers": download_layers,
+                "color": QColor(173, 216, 230),  # Light blue
+                "expanded": True
+            },
+            {
+                "title": "LAYERS TO UPLOAD (Push Local Changes)",
+                "layers": upload_layers,
+                "color": QColor(144, 238, 144),  # Light green
+                "expanded": True
+            },
+            {
+                "title": "LAYERS NOT CONNECTED",
+                "layers": not_connected_layers,
+                "color": QColor(255, 255, 224),  # Light yellow
+                "expanded": True
+            },
+            {
+                "title": "LAYERS IN SYNC (No Action Needed)",
+                "layers": in_sync_layers,
+                "color": QColor(211, 211, 211),  # Light gray
+                "expanded": False
+            }
+        ]
+        
+        # Add groups to tree
+        for group in groups:
+            if not group["layers"]:
+                continue  # Skip empty groups
+            
+            # Add spacing item before group (except for the first non-empty group)
+            if self.layersTree.topLevelItemCount() > 0:
+                spacing_item = QTreeWidgetItem(self.layersTree)
+                spacing_item.setFlags(Qt.NoItemFlags)  # Make it non-selectable
+                spacing_item.setText(1, "")  # Empty text
+                spacing_item.setSizeHint(0, QSize(0, 10))  # Set height to 10 pixels
+            
+            # Create group header item
+            group_item = QTreeWidgetItem(self.layersTree)
+            group_item.setText(1, group["title"])
+            group_item.setFlags(Qt.ItemIsEnabled)
+            
+            # Set background color for all columns
+            for col in range(3):
+                group_item.setBackground(col, QBrush(group["color"]))
+            
+            # Make font bold for header
+            font = group_item.font(1)
+            font.setBold(True)
+            for col in range(3):
+                group_item.setFont(col, font)
+            
+            # Expand by default
+            group_item.setExpanded(group["expanded"])
+            
+            # Add child items
+            if group["title"] == "LAYERS NOT CONNECTED":
+                # Add Connect Layers button to the header (smaller size)
+                connect_button = QPushButton("Connect")
+                connect_button.setMaximumWidth(80)
+                connect_button.setMaximumHeight(20)
+                connect_button.setStyleSheet("QPushButton { padding: 2px; }")
+                connect_button.clicked.connect(self.on_batch_connect_clicked)
+                self.layersTree.setItemWidget(group_item, 2, connect_button)
+                
+                # Handle not connected layers
+                for layer in group["layers"]:
+                    self._add_not_connected_layer(group_item, layer)
+            else:
+                # Handle connected layers
+                for layer, status in group["layers"]:
+                    self._add_connected_layer(group_item, layer, status)
+        
+        # Resize columns to content
+        for i in range(3):
+            self.layersTree.resizeColumnToContents(i)
+            
+        # Force refresh to ensure all widgets are properly displayed
+        self.refresh_tree()
+    
+    def _add_connected_layer(self, parent_item, layer, status):
+        """Add a connected layer to the tree under the specified parent item."""
+        item = QTreeWidgetItem(parent_item)
+        item.setText(1, layer.name())
+        
+        # Set action based on status
+        if status == "local_modified":
+            item.setText(0, "Upload to MapHub")
+        elif status == "remote_newer":
+            item.setText(0, "Download from MapHub")
+        elif status == "processing":
+            item.setText(0, "Processing on MapHub")
+        elif status == "style_changed":
+            # Add style resolution combo box
+            style_combo = QComboBox()
+            style_combo.addItems(["Keep Local Style", "Use Remote Style"])
+            self.layersTree.setItemWidget(item, 0, style_combo)
+        elif status == "in_sync":
+            item.setText(0, "In Sync")
+        elif status == "file_missing":
+            item.setText(0, "File Missing")
+        elif status == "remote_error":
+            item.setText(0, "Remote Error")
+        
+        # Add checkbox for selection (except for in-sync layers)
+        if status not in ["in_sync", "file_missing", "remote_error", "processing"]:
+            checkbox = QCheckBox()
+            checkbox.setChecked(False)
+            # Ensure the item is visible in the tree before adding the widget
+            self.layersTree.setItemWidget(item, 2, checkbox)
+            # Force update to make checkbox visible
+            item.setSelected(False)
+        
+        # Store layer reference
+        item.setData(1, Qt.UserRole, layer)
+    
+    def _add_not_connected_layer(self, parent_item, layer):
+        """Add a non-connected layer to the tree under the specified parent item."""
+        item = QTreeWidgetItem(parent_item)
+        item.setText(1, layer.name())
+        
+        # Gray out the text
+        for col in range(3):
+            item.setForeground(col, QBrush(QColor(128, 128, 128)))
+        
+        # Add "Not Connected" text in the action column
+        item.setText(0, "Not Connected")
+        
+        # Add disabled checkbox
+        checkbox = QCheckBox()
+        checkbox.setEnabled(False)
+        self.layersTree.setItemWidget(item, 2, checkbox)
+        # Force update to make checkbox visible
+        item.setSelected(False)
+        
+        # Store layer reference
+        item.setData(1, Qt.UserRole, layer)
     
     def _add_status_icon(self, item, column, status):
         """
@@ -175,11 +297,16 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         """
         # Get all not connected layers
         not_connected_layers = []
+        
+        # Find the "LAYERS NOT CONNECTED" group
         for i in range(self.layersTree.topLevelItemCount()):
-            item = self.layersTree.topLevelItem(i)
-            layer = item.data(0, Qt.UserRole)
-            if layer.customProperty("maphub/map_id") is None:
-                not_connected_layers.append(layer)
+            group_item = self.layersTree.topLevelItem(i)
+            if group_item.text(1) == "LAYERS NOT CONNECTED":
+                for j in range(group_item.childCount()):
+                    child_item = group_item.child(j)
+                    layer = child_item.data(1, Qt.UserRole)
+                    not_connected_layers.append(layer)
+                break
         
         if not not_connected_layers:
             QMessageBox.information(
@@ -196,6 +323,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Refresh the dialog if layers were connected
         if result == QDialog.Accepted:
             self.populate_layers()
+            # Additional refresh to ensure checkboxes are visible
+            self.refresh_tree()
     
     def on_connect_clicked(self, layer):
         """
@@ -235,25 +364,28 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         """Handle click on the Synchronize Selected button."""
         # Get selected layers with their synchronization directions
         selected_items = []
+        
         for i in range(self.layersTree.topLevelItemCount()):
-            item = self.layersTree.topLevelItem(i)
-            checkbox = self.layersTree.itemWidget(item, 4)
-            if checkbox and checkbox.isChecked():
-                layer = item.data(0, Qt.UserRole)
-                
-                # Get synchronization direction
-                direction = "auto"
-                
-                # Check if this is a style conflict
-                widget = self.layersTree.itemWidget(item, 3)
-                if isinstance(widget, QComboBox):
-                    # This is a style conflict, get the selected option
-                    if widget.currentText() == "Keep Local Style":
-                        direction = "push"
-                    else:  # "Use Remote Style"
-                        direction = "pull"
-                
-                selected_items.append((layer, direction))
+            group_item = self.layersTree.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                child_item = group_item.child(j)
+                checkbox = self.layersTree.itemWidget(child_item, 2)
+                if checkbox and checkbox.isChecked():
+                    layer = child_item.data(1, Qt.UserRole)
+                    
+                    # Get synchronization direction
+                    direction = "auto"
+                    
+                    # Check if this is a style conflict
+                    widget = self.layersTree.itemWidget(child_item, 0)
+                    if isinstance(widget, QComboBox):
+                        # This is a style conflict, get the selected option
+                        if widget.currentText() == "Keep Local Style":
+                            direction = "push"
+                        else:  # "Use Remote Style"
+                            direction = "pull"
+                    
+                    selected_items.append((layer, direction))
         
         # If no layers selected, show a message
         if not selected_items:
@@ -280,7 +412,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 self.sync_manager.synchronize_layer(layer, direction)
                 success_count += 1
             except Exception as e:
-                from ...utils.error_handling import ErrorManager
+                from ...utils.error_manager import ErrorManager
                 ErrorManager.show_error(f"Failed to synchronize layer '{layer.name()}'", e, self)
             
             # Check if user canceled

@@ -1,10 +1,12 @@
 import sys
 import traceback
+import os
+from pathlib import Path
 from typing import Dict, Any
 from xml.etree import ElementTree as ET
 
 from qgis.core import QgsMapLayer
-from qgis.PyQt.QtCore import QSettings
+from qgis.PyQt.QtCore import QSettings, QStandardPaths
 from qgis.PyQt.QtWidgets import QMessageBox
 from PyQt5.QtXml import QDomDocument
 
@@ -54,6 +56,28 @@ def get_maphub_client() -> MapHubClient | None:
         api_key=api_key,
         x_api_source="qgis-plugin",
     )
+
+
+def get_default_download_location():
+    """
+    Get the default location for downloaded layers.
+    
+    Returns:
+        Path: Path object pointing to the default download location
+    """
+    # First check if there's a user-defined location in settings
+    settings = QSettings()
+    default_location = settings.value("MapHubPlugin/default_download_location", "", type=str)
+    
+    if not default_location:
+        # If no user setting, use Documents/MapHub as default
+        documents_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        default_location = str(Path(documents_path) / "MapHub")
+    
+    # Ensure the directory exists
+    Path(default_location).mkdir(parents=True, exist_ok=True)
+    
+    return Path(default_location)
 
 
 def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:

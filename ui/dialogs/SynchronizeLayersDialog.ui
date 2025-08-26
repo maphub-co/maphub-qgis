@@ -55,8 +55,13 @@
    <item>
     <widget class="QTreeWidget" name="layersTree">
      <property name="columnCount">
-      <number>5</number>
+      <number>3</number>
      </property>
+     <column>
+      <property name="text">
+       <string>Sync</string>
+      </property>
+     </column>
      <column>
       <property name="text">
        <string>Layer Name</string>
@@ -64,22 +69,7 @@
      </column>
      <column>
       <property name="text">
-       <string>Local Status</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Remote Status</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
        <string>Action</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Sync</string>
       </property>
      </column>
     </widget>

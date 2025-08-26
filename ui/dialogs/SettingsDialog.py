@@ -1,10 +1,13 @@
 import os
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings, QStandardPaths
 from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QFileDialog
 from qgis.PyQt import uic
+from pathlib import Path
 
 from .MapHubBaseDialog import MapHubBaseDialog
 from ...utils.error_manager import handled_exceptions
+from ...utils.utils import get_default_download_location
 
 # Load the UI file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -46,6 +49,7 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         # Connect signals
         self.buttonBox.accepted.connect(self.on_accepted)
         self.refreshNowButton.clicked.connect(self.on_refresh_now_clicked)
+        self.browseButton.clicked.connect(self.on_browse_clicked)
         
         # Load settings
         self.load_settings()
@@ -70,7 +74,13 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         self.enablePeriodicUpdatesCheckBox.setChecked(enable_periodic)
         self.updateIntervalSpinBox.setValue(update_interval)
         
-        # Future: Load settings for other tabs
+        # Load default download location
+        default_location = settings.value("MapHubPlugin/default_download_location", "", type=str)
+        if not default_location:
+            # If no setting exists, use the default location from the utility function
+            default_location = str(get_default_download_location())
+        
+        self.defaultLocationLineEdit.setText(default_location)
         
     def save_settings(self):
         """Save settings to QSettings."""
@@ -82,10 +92,32 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         settings.setValue("MapHubPlugin/update_interval", 
                          self.updateIntervalSpinBox.value())
         
-        # Future: Save settings for other tabs
+        # Save default download location
+        settings.setValue("MapHubPlugin/default_download_location",
+                         self.defaultLocationLineEdit.text())
 
     @handled_exceptions
     def on_refresh_now_clicked(self, checked=False):
         """Handle click on the Refresh Now button."""
         if self.refresh_callback:
             self.refresh_callback()
+            
+    @handled_exceptions
+    def on_browse_clicked(self, checked=False):
+        """Handle click on the Browse button for default download location."""
+        # Get current path or default to Documents folder
+        current_path = self.defaultLocationLineEdit.text()
+        if not current_path:
+            documents_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+            current_path = str(Path(documents_path) / "MapHub")
+            
+        # Open directory selection dialog
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Default Download Location",
+            current_path
+        )
+        
+        # Update text field if a directory was selected
+        if directory:
+            self.defaultLocationLineEdit.setText(directory)

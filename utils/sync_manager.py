@@ -2,13 +2,14 @@ import hashlib
 import os
 import tempfile
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 from PyQt5.QtWidgets import QMessageBox
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
 from ..maphub.exceptions import APIException
-from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json
+from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location
 
 
 class MapHubSyncManager:
@@ -198,8 +199,47 @@ class MapHubSyncManager:
                 self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer.name()}' successfully uploaded to MapHub.")
                 
             elif direction == "pull":
-                # Download remote changes
+                # Get the local path or use default download location if missing
                 local_path = layer.customProperty("maphub/local_path")
+                
+                # Check if local path exists or needs to be updated
+                if not local_path or not os.path.exists(local_path) or status == "file_missing":
+                    # Get default download location
+                    default_dir = get_default_download_location()
+                    
+                    # Create safe filename from layer name
+                    layer_name = layer.name()
+                    safe_name = ''.join(c for c in layer_name if c.isalnum() or c in ' _-')
+                    safe_name = safe_name.replace(' ', '_')
+                    
+                    # Determine file extension based on layer type
+                    if isinstance(layer, QgsVectorLayer):
+                        file_extension = '.gpkg'  # Default to GeoPackage for vector
+                    elif isinstance(layer, QgsRasterLayer):
+                        file_extension = '.tif'  # Default to GeoTIFF for raster
+                    else:
+                        file_extension = '.gpkg'  # Default fallback
+                    
+                    # If original path exists, try to use its extension
+                    if local_path and os.path.exists(os.path.dirname(local_path)):
+                        orig_ext = os.path.splitext(local_path)[1]
+                        if orig_ext:
+                            file_extension = orig_ext
+                    
+                    # Create full file path
+                    local_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
+                    
+                    # Ensure filename is unique
+                    counter = 1
+                    base_name = os.path.splitext(local_path)[0]
+                    while os.path.exists(local_path):
+                        local_path = f"{base_name}_{counter}{file_extension}"
+                        counter += 1
+                    
+                    # Update the layer property with the new path
+                    layer.setCustomProperty("maphub/local_path", local_path)
+                
+                # Download remote changes
                 get_maphub_client().maps.download_map(map_id, local_path)
                 
                 # Reload layer from file
@@ -374,5 +414,5 @@ class MapHubSyncManager:
             message: The error message
             exception: The exception that caused the error (optional)
         """
-        from .error_handling import ErrorManager
+        from .error_manager import ErrorManager
         ErrorManager.show_error(message, exception)

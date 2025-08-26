@@ -9,21 +9,21 @@ from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
 # from .. import utils
-from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position
+from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position, get_default_download_location
 from .sync_manager import MapHubSyncManager
 
 
 def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = None) -> Optional[str]:
     """
-    Download a map and add it to the QGIS project.
+    Download a map to the default download location and add it to the QGIS project.
 
     Args:
         map_data (Dict[str, Any]): The map data
         parent: The parent widget for dialogs
-        selected_format (str, optional): The format to download the map in. If None, the user will be prompted.
+        selected_format (str, optional): The format to download the map in. If None, a default format will be selected based on the map type.
 
     Returns:
-        Optional[str]: The path to the downloaded file, or None if the download was cancelled
+        Optional[str]: The path to the downloaded file
     """
     print(f"Downloading map: {map_data.get('name')}")
 
@@ -37,28 +37,22 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
     # Determine file extension and filter based on selected format
     file_extension = f".{selected_format}"
 
-    # Create filter string based on selected format
-    if selected_format == "tif":
-        filter_string = "GeoTIFF (*.tif);;All Files (*)"
-    elif selected_format == "fgb":
-        filter_string = "FlatGeobuf (*.fgb);;All Files (*)"
-    elif selected_format == "shp":
-        filter_string = "Shapefile (*.shp);;All Files (*)"
-    elif selected_format == "gpkg":
-        filter_string = "GeoPackage (*.gpkg);;All Files (*)"
-    else:
-        filter_string = "All Files (*)"
-
-    file_path, _ = QFileDialog.getSaveFileName(
-        parent,
-        "Save Map",
-        f"{map_data.get('name', 'map')}{file_extension}",
-        filter_string
-    )
-
-    # If user cancels the dialog, return early
-    if not file_path:
-        return None
+    # Get default download location
+    default_dir = get_default_download_location()
+    
+    # Create safe filename from map name
+    safe_name = ''.join(c for c in map_data.get('name', 'map') if c.isalnum() or c in ' _-')
+    safe_name = safe_name.replace(' ', '_')
+    
+    # Create full file path
+    file_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
+    
+    # Ensure filename is unique
+    counter = 1
+    base_name = os.path.splitext(file_path)[0]
+    while os.path.exists(file_path):
+        file_path = f"{base_name}_{counter}{file_extension}"
+        counter += 1
 
     # Download the map with the selected format
     get_maphub_client().maps.download_map(map_data['id'], file_path, selected_format)
@@ -91,12 +85,6 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
         if 'visuals' in map_data and map_data['visuals']:
             visuals = map_data['visuals']
             apply_style_to_layer(layer, visuals)
-
-        QMessageBox.information(
-            parent,
-            "Download Complete",
-            f"Map '{map_data.get('name')}' has been downloaded, added to your layers, and connected to MapHub."
-        )
 
     return file_path
 
@@ -250,12 +238,13 @@ def add_folder_maps_as_tiling_services(folder_id: str, parent=None) -> Tuple[int
 
 def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -> Tuple[int, int]:
     """
-    Download all maps in a folder and add them to the QGIS project.
+    Download all maps in a folder to the default download location and add them to the QGIS project.
+    Shows a progress dialog during download and only displays a message if errors occur.
 
     Args:
         folder_id (str): The ID of the folder
         parent: The parent widget for dialogs
-        format_type (str, optional): The format to download the maps in. If None, the default format will be used.
+        format_type (str, optional): The format to download the maps in. If None, the default format will be used based on map type.
 
     Returns:
         Tuple[int, int]: A tuple of (success_count, total_count)
@@ -274,16 +263,8 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
         )
         return 0, 0
 
-    # Ask for directory to save maps
-    directory = QFileDialog.getExistingDirectory(
-        parent,
-        "Select Directory to Save Maps",
-        "",
-        QFileDialog.ShowDirsOnly
-    )
-
-    if not directory:
-        return 0, 0  # User cancelled
+    # Use default download location
+    directory = str(get_default_download_location())
 
     # Create progress dialog
     progress_dialog = QDialog(parent)
@@ -360,14 +341,15 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
     # Close progress dialog
     progress_dialog.close()
 
-    # Show completion message
-    message = f"Successfully downloaded {success_count} out of {len(maps)} maps."
+    # Log errors to console if any occurred
     if errors:
-        message += "\n\nErrors:\n" + "\n".join(errors)
-    QMessageBox.information(
-        parent,
-        "Maps Downloaded",
-        message
-    )
+        error_message = f"Errors occurred while downloading maps:\n" + "\n".join(errors)
+        print(error_message)
+        # Show only error messages in a dialog
+        QMessageBox.warning(
+            parent,
+            "Download Errors",
+            error_message
+        )
 
     return success_count, len(maps)

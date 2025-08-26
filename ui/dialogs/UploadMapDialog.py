@@ -2,6 +2,7 @@
 import os
 import tempfile
 from datetime import datetime
+from pathlib import Path
 
 from qgis.PyQt import uic
 from qgis.PyQt import QtWidgets
@@ -10,7 +11,7 @@ from qgis.PyQt.QtGui import QIcon, QCursor
 from qgis.core import QgsMapLayer, QgsVectorLayer, QgsRasterLayer
 
 from .CreateFolderDialog import CreateFolderDialog
-from ...utils.utils import get_maphub_client, get_layer_styles_as_json
+from ...utils.utils import get_maphub_client, get_layer_styles_as_json, get_default_download_location
 from .MapHubBaseDialog import MapHubBaseDialog
 from ...utils.error_manager import handled_exceptions
 
@@ -349,10 +350,45 @@ class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
             
             # Connect the layer to the uploaded map
             if map_id:
-                # Get the layer's source path
+                # Determine if we should use the original source path or the default location
                 source_path = layer.source()
                 if '|' in source_path:  # Handle layers with query parameters
                     source_path = source_path.split('|')[0]
+                
+                # Check if the source path exists and is accessible
+                if not os.path.exists(source_path) or not os.access(os.path.dirname(source_path), os.W_OK):
+                    # Use default download location instead
+                    default_dir = get_default_download_location()
+                    
+                    # Create safe filename from map name
+                    safe_name = ''.join(c for c in map_name if c.isalnum() or c in ' _-')
+                    safe_name = safe_name.replace(' ', '_')
+                    
+                    # Use the same file extension as the original file
+                    file_extension = os.path.splitext(source_path)[1]
+                    if not file_extension:
+                        # Determine default extension based on layer type
+                        if isinstance(layer, QgsVectorLayer):
+                            file_extension = '.gpkg'  # Default to GeoPackage
+                        elif isinstance(layer, QgsRasterLayer):
+                            file_extension = '.tif'  # Default to GeoTIFF
+                        else:
+                            file_extension = '.gpkg'  # Default fallback
+                    
+                    # Create full file path
+                    source_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
+                    
+                    # Ensure filename is unique
+                    counter = 1
+                    base_name = os.path.splitext(source_path)[0]
+                    while os.path.exists(source_path):
+                        source_path = f"{base_name}_{counter}{file_extension}"
+                        counter += 1
+                    
+                    # Copy the temp file to the new location
+                    with open(temp_file, 'rb') as src_file:
+                        with open(source_path, 'wb') as dst_file:
+                            dst_file.write(src_file.read())
                 
                 # Connect the layer to MapHub
                 from ...utils.sync_manager import MapHubSyncManager
@@ -368,7 +404,7 @@ class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
                 QtWidgets.QMessageBox.information(
                     self,
                     "Upload Successful",
-                    f"Map '{map_name}' has been uploaded to MapHub and connected to the selected layer."
+                    f"Map '{map_name}' has been uploaded to MapHub and connected to the selected layer.\nFile saved at: {source_path}"
                 )
             else:
                 # Show success message without connection information

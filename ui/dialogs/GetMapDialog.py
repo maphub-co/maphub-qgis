@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+from pathlib import Path
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import Qt
@@ -14,7 +15,7 @@ from PyQt5.QtCore import QThread, pyqtSignal, QByteArray
 from PyQt5.QtGui import QPixmap
 from qgis.core import QgsVectorTileLayer, QgsRasterLayer, QgsProject
 
-from ...utils.utils import get_maphub_client, apply_style_to_layer
+from ...utils.utils import get_maphub_client, apply_style_to_layer, get_default_download_location
 from .MapHubBaseDialog import MapHubBaseDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
 from ...utils.error_manager import handled_exceptions
@@ -396,33 +397,25 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
 
         # Get the selected format
         selected_format = format_combo.currentData()
-
-        # Determine file extension and filter based on selected format
         file_extension = f".{selected_format}"
-
-        # Create filter string based on selected format
-        if selected_format == "tif":
-            filter_string = "GeoTIFF (*.tif);;All Files (*)"
-        elif selected_format == "fgb":
-            filter_string = "FlatGeobuf (*.fgb);;All Files (*)"
-        elif selected_format == "shp":
-            filter_string = "Shapefile (*.shp);;All Files (*)"
-        elif selected_format == "gpkg":
-            filter_string = "GeoPackage (*.gpkg);;All Files (*)"
-        else:
-            filter_string = "All Files (*)"
-
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Save Map",
-            f"{map_data.get('name', 'map')}{file_extension}",
-            filter_string
-        )
-
-        # If user cancels the dialog, return early
-        if not file_path:
-            return
-
+        
+        # Get default download location
+        default_dir = get_default_download_location()
+        
+        # Create safe filename from map name
+        safe_name = ''.join(c for c in map_data.get('name', 'map') if c.isalnum() or c in ' _-')
+        safe_name = safe_name.replace(' ', '_')
+        
+        # Create full file path
+        file_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
+        
+        # Ensure filename is unique
+        counter = 1
+        base_name = os.path.splitext(file_path)[0]
+        while os.path.exists(file_path):
+            file_path = f"{base_name}_{counter}{file_extension}"
+            counter += 1
+        
         # Download the map with the selected format
         get_maphub_client().maps.download_map(map_data['id'], file_path, selected_format)
 
@@ -448,7 +441,7 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
             QMessageBox.information(
                 self,
                 "Download Complete",
-                f"Map '{map_data.get('name')}' has been downloaded and added to your layers."
+                f"Map '{map_data.get('name')}' has been downloaded to {file_path} and added to your layers."
             )
 
     @handled_exceptions
