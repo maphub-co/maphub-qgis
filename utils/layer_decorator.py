@@ -91,36 +91,53 @@ class MapHubLayerDecorator:
         
         # Store the status in the layer's custom properties for potential use elsewhere
         layer.setCustomProperty("maphub/sync_status", status)
-        
+
         # Get icon for status
         icon = self._get_status_icon(status)
-        if not icon:
-            return
+        if icon:
+            # Create a unique ID for the status indicator
+            indicator_id = f"maphub_{layer.id()}_{status}"
             
-        # Create a unique ID for this indicator
-        indicator_id = f"maphub_{layer.id()}_{status}"
-        
-        # Create and register the indicator
-        indicator = QgsLayerTreeViewIndicator(layer_tree_view)
-        indicator.setIcon(icon)
-        
-        # Set tooltip based on status
-        if status == "local_modified":
-            indicator.setToolTip("Local changes need to be uploaded to MapHub")
-        elif status == "remote_newer":
-            indicator.setToolTip("Remote changes need to be downloaded from MapHub")
-        elif status == "style_changed":
-            indicator.setToolTip("Style changes detected")
-        elif status == "file_missing":
-            indicator.setToolTip("Local file is missing")
-        elif status == "remote_error":
-            indicator.setToolTip("Error checking remote status")
-        
-        # Add the indicator to the layer
-        layer_tree_view.addIndicator(node, indicator)
-        
-        # Store the indicator for later removal
-        self._indicators[indicator_id] = (node, indicator)
+            # Create and register the status indicator
+            indicator = QgsLayerTreeViewIndicator(layer_tree_view)
+            indicator.setIcon(icon)
+            
+            # Set tooltip based on status
+            if status == "local_modified":
+                indicator.setToolTip("Local changes need to be uploaded to MapHub")
+            elif status == "remote_newer":
+                indicator.setToolTip("Remote changes need to be downloaded from MapHub")
+            elif status == "style_changed":
+                indicator.setToolTip("Style changes detected")
+            elif status == "file_missing":
+                indicator.setToolTip("Local file is missing")
+            elif status == "remote_error":
+                indicator.setToolTip("Error checking remote status")
+            
+            # Add the status indicator to the layer
+            layer_tree_view.addIndicator(node, indicator)
+            
+            # Store the status indicator for later removal
+            self._indicators[indicator_id] = (node, indicator)
+        else:
+            # Always add a chain icon to indicate the layer is connected to MapHub
+            chain_icon_path = os.path.join(self.icon_dir, 'chain.svg')
+            chain_icon = QIcon(chain_icon_path)
+
+            # Create a unique ID for the chain indicator
+            chain_indicator_id = f"maphub_chain_{layer.id()}"
+
+            # Create and register the chain indicator
+            chain_indicator = QgsLayerTreeViewIndicator(layer_tree_view)
+            chain_indicator.setIcon(chain_icon)
+            chain_indicator.setToolTip("Layer is connected to MapHub")
+
+            # Add the chain indicator to the layer
+            layer_tree_view.addIndicator(node, chain_indicator)
+
+            # Store the chain indicator for later removal
+            self._indicators[chain_indicator_id] = (node, chain_indicator)
+
 
     def cleanup(self):
         """

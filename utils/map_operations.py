@@ -10,6 +10,7 @@ from qgis.utils import iface
 
 # from .. import utils
 from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position
+from .sync_manager import MapHubSyncManager
 
 
 def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = None) -> Optional[str]:
@@ -338,6 +339,15 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
                     place_layer_at_position(project, layer, map_data.get('visuals', {}).get('layer_order'))
                     if 'visuals' in map_data and map_data['visuals']:
                         apply_style_to_layer(layer, map_data['visuals'])
+                    
+                    # Connect the layer to MapHub
+                    sync_manager = MapHubSyncManager(iface)
+                    sync_manager.connect_layer(
+                        layer,
+                        map_data.get('id'),
+                        folder_id,
+                        file_path
+                    )
                     success_count += 1
 
             # Update progress

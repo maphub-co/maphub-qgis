@@ -1,6 +1,6 @@
 <RCC>
     <qresource prefix="/plugins/maphub" >
-        <file>icon.png</file>
+        <file>icons/icon.png</file>
         <file>clone.png</file>
         <file>pull.png</file>
         <file>push.png</file>
@@ -9,5 +9,7 @@
         <file>icons/folder.svg</file>
         <file>icons/vector_map.svg</file>
         <file>icons/raster_map.svg</file>
+        <file>icons/chain.svg</file>
+        <file>icons/refresh.svg</file>
     </qresource>
 </RCC>

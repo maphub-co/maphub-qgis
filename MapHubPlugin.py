@@ -3,7 +3,7 @@
 import os
 import os.path
 
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt, QEvent, QDataStream, QIODevice, QObject
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 from qgis.core import QgsProject
@@ -16,13 +16,14 @@ from .ui.dialogs.SettingsDialog import SettingsDialog
 from .ui.dialogs.UploadMapDialog import UploadMapDialog
 from .ui.dialogs.PullProjectDialog import PullProjectDialog
 from .ui.dialogs.PushProjectDialog import PushProjectDialog
-from .ui.widgets.MapBrowserDockWidget import MapBrowserDockWidget
+from .ui.widgets.MapBrowserDockWidget import MapBrowserDockWidget, MapBrowserTreeWidget
 from .utils.scheduler_manager import SchedulerManager
 from .utils.error_manager import handled_exceptions
+from .utils.map_operations import download_map, download_folder_maps
 
 
 
-class MapHubPlugin:
+class MapHubPlugin(QObject):
     """QGIS Plugin Implementation."""
 
     def __init__(self, iface):
@@ -33,6 +34,8 @@ class MapHubPlugin:
             application at run time.
         :type iface: QgsInterface
         """
+        # Initialize the QObject base class
+        super(MapHubPlugin, self).__init__()
 
         # Save reference to the QGIS interface
         self.iface = iface
@@ -156,7 +159,7 @@ class MapHubPlugin:
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
 
-        icon_path = os.path.join(self.plugin_dir, 'icon.png')
+        icon_path = os.path.join(self.plugin_dir, 'icons', 'icon.png')
         self.add_action(
             os.path.join(self.plugin_dir, 'get.png'),
             text=self.tr(u'Get map'),
@@ -165,21 +168,21 @@ class MapHubPlugin:
             add_to_toolbar=True
         )
 
-        self.add_action(
-            icon_path,
-            text=self.tr(u'Upload to MapHub'),
-            callback=self.upload_map,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=True
-        )
-
-        self.add_action(
-            icon_path,
-            text=self.tr(u'Create folder'),
-            callback=self.create_folder,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=False
-        )
+        # self.add_action(
+        #     icon_path,
+        #     text=self.tr(u'Upload to MapHub'),
+        #     callback=self.upload_map,
+        #     parent=self.iface.mainWindow(),
+        #     add_to_toolbar=True
+        # )
+        #
+        # self.add_action(
+        #     icon_path,
+        #     text=self.tr(u'Create folder'),
+        #     callback=self.create_folder,
+        #     parent=self.iface.mainWindow(),
+        #     add_to_toolbar=False
+        # )
 
         self.add_action(
             icon_path,
@@ -188,31 +191,31 @@ class MapHubPlugin:
             parent=self.iface.mainWindow(),
             add_to_toolbar=False
         )
+        #
+        # self.add_action(
+        #     os.path.join(self.plugin_dir, 'clone.png'),
+        #     text=self.tr(u'Clone Project From MapHub'),
+        #     callback=self.clone_project,
+        #     parent=self.iface.mainWindow(),
+        #     add_to_toolbar=False
+        # )
+        #
+        # self.add_action(
+        #     os.path.join(self.plugin_dir, 'pull.png'),
+        #     text=self.tr(u'Pull Project from MapHub'),
+        #     callback=self.pull_project,
+        #     parent=self.iface.mainWindow(),
+        #     add_to_toolbar=False
+        # )
+        #
+        # self.add_action(
+        #     os.path.join(self.plugin_dir, 'push.png'),
+        #     text=self.tr(u'Push Project to MapHub'),
+        #     callback=self.push_project,
+        #     parent=self.iface.mainWindow(),
+        #     add_to_toolbar=False
+        # )
 
-        self.add_action(
-            os.path.join(self.plugin_dir, 'clone.png'),
-            text=self.tr(u'Clone Project From MapHub'),
-            callback=self.clone_project,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=False
-        )
-
-        self.add_action(
-            os.path.join(self.plugin_dir, 'pull.png'),
-            text=self.tr(u'Pull Project from MapHub'),
-            callback=self.pull_project,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=False
-        )
-
-        self.add_action(
-            os.path.join(self.plugin_dir, 'push.png'),
-            text=self.tr(u'Push Project to MapHub'),
-            callback=self.push_project,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=False
-        )
-        
         # Add Synchronize button
         self.add_action(
             os.path.join(self.plugin_dir, 'icons', 'sync.svg'),
@@ -223,7 +226,7 @@ class MapHubPlugin:
         )
 
         self.add_action(
-            os.path.join(self.plugin_dir, 'icon.png'),
+            os.path.join(self.plugin_dir, 'icons', 'icon.png'),
             text=self.tr(u'MapHub Browser'),
             callback=self.show_map_browser,
             parent=self.iface.mainWindow(),
@@ -236,7 +239,7 @@ class MapHubPlugin:
             text=self.tr(u'Settings'),
             callback=self.show_settings,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=False
+            add_to_toolbar=True
         )
 
         # will be set False in run()
@@ -260,6 +263,12 @@ class MapHubPlugin:
         # Connect to project events to update layer icons
         QgsProject.instance().layersAdded.connect(self.on_layers_changed)
         QgsProject.instance().layersRemoved.connect(self.on_layers_changed)
+        
+        # Register drop handlers for drag and drop support
+        self.iface.mapCanvas().setAcceptDrops(True)
+        self.iface.mapCanvas().installEventFilter(self)
+        self.iface.layerTreeView().setAcceptDrops(True)
+        self.iface.layerTreeView().installEventFilter(self)
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -290,6 +299,12 @@ class MapHubPlugin:
         if self.map_browser_dock:
             self.map_browser_dock.close()
             self.map_browser_dock = None
+            
+        # Remove event filters for drag and drop
+        if self.iface.mapCanvas():
+            self.iface.mapCanvas().removeEventFilter(self)
+        if self.iface.layerTreeView():
+            self.iface.layerTreeView().removeEventFilter(self)
 
     def check_api_key(self):
         """Check if API key exists, prompt for it if not."""
@@ -350,7 +365,7 @@ class MapHubPlugin:
     def show_map_browser(self, checked=False):
         """Show the map browser dock widget."""
         if self.map_browser_dock is None:
-            self.map_browser_dock = MapBrowserDockWidget(self.iface, self.iface.mainWindow())
+            self.map_browser_dock = MapBrowserDockWidget(self.iface, self.iface.mainWindow(), refresh_callback=self.refresh_status)
             self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.map_browser_dock)
             
             # Refresh the browser dock immediately to ensure it's up to date
@@ -434,10 +449,63 @@ class MapHubPlugin:
         if self.layer_decorator:
             self.layer_decorator.update_layer_icons()
 
-        # Update browser dock icons if available
+        # Update browser dock if available
         if self.map_browser_dock:
-            # Refresh all connected maps in the browser
-            for layer in QgsProject.instance().mapLayers().values():
-                map_id = layer.customProperty("maphub/map_id")
-                if map_id and self.map_browser_dock:
-                    self.map_browser_dock.refresh_map_item(map_id)
+            self.map_browser_dock.refresh_browser()
+            
+    def eventFilter(self, obj, event):
+        """
+        Handle events for objects that have installed this object as an event filter.
+        
+        This is used to handle drag and drop events from the MapBrowserDockWidget.
+        """
+        if event.type() == QEvent.DragEnter:
+            if event.mimeData().hasFormat(MapBrowserTreeWidget.MIME_TYPE):
+                event.acceptProposedAction()
+                return True
+        elif event.type() == QEvent.Drop:
+            if event.mimeData().hasFormat(MapBrowserTreeWidget.MIME_TYPE):
+                # Process the drop
+                self.processDrop(event.mimeData())
+                event.acceptProposedAction()
+                return True
+        
+        # Standard event processing
+        return super(MapHubPlugin, self).eventFilter(obj, event)
+        
+    def processDrop(self, mime_data):
+        """
+        Process the dropped data from the MapBrowserDockWidget.
+        
+        Args:
+            mime_data: The mime data containing the dropped item information
+        """
+        encoded_data = mime_data.data(MapBrowserTreeWidget.MIME_TYPE)
+        stream = QDataStream(encoded_data, QIODevice.ReadOnly)
+        
+        # Read the item type and ID
+        item_type = stream.readQString()
+        item_id = stream.readQString()
+        
+        if item_type == 'map':
+            # Read map data
+            map_id = stream.readQString()
+            map_name = stream.readQString()
+            map_type = stream.readQString()
+            folder_id = stream.readQString()
+            
+            # Create map_data dictionary
+            map_data = {
+                'id': map_id,
+                'name': map_name,
+                'type': map_type
+            }
+            if folder_id:
+                map_data['folder_id'] = folder_id
+            
+            # Call the download function
+            download_map(map_data, self.iface.mainWindow())
+        
+        elif item_type == 'folder':
+            # Call the download all function
+            download_folder_maps(item_id, self.iface.mainWindow())

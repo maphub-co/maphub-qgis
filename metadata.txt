@@ -27,7 +27,7 @@ tags=python
 
 homepage=https://www.maphub.co
 category=Plugins
-icon=icon.png
+icon=icons/icon.png
 # experimental flag
 experimental=False
 
