@@ -31,16 +31,24 @@ class MapHubLayerMenuProvider:
         """
         Set up the context menu integration.
         
-        This method connects to the contextMenuAboutToShow signal of the layer tree view,
-        which allows us to extend the existing context menu rather than replacing it.
-        This ensures that all default QGIS actions remain available alongside the
-        MapHub-specific actions.
+        This method connects to the appropriate signal for context menu integration
+        based on the QGIS version:
+        - For newer QGIS versions (3.34+): Uses contextMenuAboutToShow signal
+        - For older QGIS versions (3.28 and earlier): Uses customContextMenuRequested signal
+        
+        This ensures compatibility across different QGIS versions.
         """
-        # Connect to the contextMenuAboutToShow signal to extend the existing menu
-        # This is different from the previous approach which used customContextMenuRequested
-        # and replaced the entire menu with a custom one
+        # Check if layerTreeView exists
         if hasattr(self.iface, 'layerTreeView'):
-            self.iface.layerTreeView().contextMenuAboutToShow.connect(self.extend_context_menu)
+            layer_tree_view = self.iface.layerTreeView()
+            
+            # Check if contextMenuAboutToShow signal exists (QGIS 3.34+)
+            if hasattr(layer_tree_view, 'contextMenuAboutToShow'):
+                # For newer QGIS versions (3.34+)
+                layer_tree_view.contextMenuAboutToShow.connect(self.extend_context_menu)
+            else:
+                # For older QGIS versions (3.28 and earlier)
+                layer_tree_view.customContextMenuRequested.connect(self.show_context_menu)
             
     def extend_context_menu(self, menu):
         """

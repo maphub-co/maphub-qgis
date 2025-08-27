@@ -31,7 +31,7 @@ def show_error_dialog(message, title="Error"):
     msg_box.exec_()
 
 
-def get_maphub_client() -> MapHubClient | None:
+def get_maphub_client() -> MapHubClient:
     settings = QSettings()
     api_key = settings.value("MapHubPlugin/api_key", "")
 
