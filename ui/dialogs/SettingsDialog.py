@@ -68,7 +68,7 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         settings = QSettings()
         
         # Load scheduler settings
-        enable_periodic = settings.value("MapHubPlugin/enable_periodic_updates", False, type=bool)
+        enable_periodic = settings.value("MapHubPlugin/enable_periodic_updates", True, type=bool)
         update_interval = settings.value("MapHubPlugin/update_interval", 5, type=int)
         
         self.enablePeriodicUpdatesCheckBox.setChecked(enable_periodic)
