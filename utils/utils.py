@@ -36,7 +36,7 @@ def get_maphub_client() -> MapHubClient:
     api_key = settings.value("MapHubPlugin/api_key", "")
     
     # Get custom base URL from settings, or use None as default
-    base_url = settings.value("MapHubPlugin/base_url", None, type=str)
+    base_url = settings.value("MapHubPlugin/base_url", None)
 
     if not api_key:
         # No API key found, ask user to input it
@@ -55,11 +55,15 @@ def get_maphub_client() -> MapHubClient:
             "API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it."
         )
 
-    return MapHubClient(
-        api_key=api_key,
-        base_url=base_url,
-        x_api_source="qgis-plugin",
-    )
+    params = {
+        "api_key": api_key,
+        "x_api_source": "qgis-plugin",
+    }
+
+    if base_url:
+        params["base_url"] = base_url
+
+    return MapHubClient(**params)
 
 
 def get_default_download_location():

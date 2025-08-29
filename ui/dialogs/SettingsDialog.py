@@ -102,7 +102,7 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         
         # Save API settings
         base_url = self.baseUrlLineEdit.text().strip()
-        if base_url:
+        if base_url and len(base_url) > 0:
             settings.setValue("MapHubPlugin/base_url", base_url)
         else:
             # If the field is empty, remove the setting to use the default
