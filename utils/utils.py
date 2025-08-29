@@ -34,6 +34,9 @@ def show_error_dialog(message, title="Error"):
 def get_maphub_client() -> MapHubClient:
     settings = QSettings()
     api_key = settings.value("MapHubPlugin/api_key", "")
+    
+    # Get custom base URL from settings, or use None as default
+    base_url = settings.value("MapHubPlugin/base_url", None, type=str)
 
     if not api_key:
         # No API key found, ask user to input it
@@ -54,6 +57,7 @@ def get_maphub_client() -> MapHubClient:
 
     return MapHubClient(
         api_key=api_key,
+        base_url=base_url,
         x_api_source="qgis-plugin",
     )
 

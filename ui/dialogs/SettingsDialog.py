@@ -82,6 +82,10 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         
         self.defaultLocationLineEdit.setText(default_location)
         
+        # Load API settings
+        base_url = settings.value("MapHubPlugin/base_url", "", type=str)
+        self.baseUrlLineEdit.setText(base_url)
+        
     def save_settings(self):
         """Save settings to QSettings."""
         settings = QSettings()
@@ -95,6 +99,14 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         # Save default download location
         settings.setValue("MapHubPlugin/default_download_location",
                          self.defaultLocationLineEdit.text())
+        
+        # Save API settings
+        base_url = self.baseUrlLineEdit.text().strip()
+        if base_url:
+            settings.setValue("MapHubPlugin/base_url", base_url)
+        else:
+            # If the field is empty, remove the setting to use the default
+            settings.remove("MapHubPlugin/base_url")
 
     @handled_exceptions
     def on_refresh_now_clicked(self, checked=False):

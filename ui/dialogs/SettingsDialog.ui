@@ -143,6 +143,29 @@
         </widget>
        </item>
        <item>
+        <widget class="QGroupBox" name="groupBoxAPI">
+         <property name="title">
+          <string>API Settings</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_6">
+          <item>
+           <widget class="QLabel" name="labelBaseUrl">
+            <property name="text">
+             <string>Custom API Base URL (leave empty to use default):</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="baseUrlLineEdit">
+            <property name="placeholderText">
+             <string>https://api-example.domain.com</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <spacer name="verticalSpacer_2">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
