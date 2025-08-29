@@ -80,11 +80,8 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
             map_data.get('folder_id', ''),
             file_path
         )
-        
-        # Apply style if available
-        if 'visuals' in map_data and map_data['visuals']:
-            visuals = map_data['visuals']
-            apply_style_to_layer(layer, visuals)
+
+        sync_manager._pull_and_apply_style(layer, map_data['id'])
 
     return file_path
 
@@ -305,6 +302,15 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
             map_id = map_data.get('id')
             file_name = f"{map_data.get('name', f'map_{map_id}')}.{selected_format}"
             file_path = os.path.join(directory, file_name)
+            
+            # Fetch complete map data including visuals if not already present
+            if 'visuals' not in map_data:
+                try:
+                    complete_map_info = client.maps.get_map(map_id)
+                    if 'map' in complete_map_info and 'visuals' in complete_map_info['map']:
+                        map_data['visuals'] = complete_map_info['map']['visuals']
+                except Exception as e:
+                    print(f"Error fetching map visuals: {str(e)}")
 
             # Download the map
             client.maps.download_map(map_data['id'], file_path, selected_format)

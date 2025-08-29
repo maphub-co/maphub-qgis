@@ -180,10 +180,10 @@ class MapHubLayerMenuProvider:
         
         if response == QMessageBox.Save:
             # Upload local style to MapHub
-            self.sync_manager.synchronize_layer(layer, "push")
+            self.sync_manager.synchronize_layer(layer, "push", style_only=True)
         elif response == QMessageBox.Open:
             # Download remote style from MapHub
-            self.sync_manager.synchronize_layer(layer, "pull")
+            self.sync_manager.synchronize_layer(layer, "pull", style_only=True)
             
     def disconnect_layer(self, layer):
         """
@@ -214,7 +214,12 @@ class MapHubLayerMenuProvider:
             layers: List of QGIS layers
         """
         for layer in layers:
-            self.sync_manager.synchronize_layer(layer)
+            # Check if this is a style-only operation
+            status = self.sync_manager.get_layer_sync_status(layer)
+            style_only = status in ["style_changed_local", "style_changed_remote", "style_changed_both"]
+            
+            # Synchronize the layer
+            self.sync_manager.synchronize_layer(layer, "auto", style_only=style_only)
             
     def disconnect_multiple_layers(self, layers):
         """
@@ -252,8 +257,12 @@ class MapHubLayerMenuProvider:
         result = dialog.exec_()
         
         if result == dialog.Accepted:
+            # Check if this is a style-only operation
+            status = self.sync_manager.get_layer_sync_status(layer)
+            style_only = status in ["style_changed_local", "style_changed_remote", "style_changed_both"]
+
             # Perform synchronization
-            self.sync_manager.synchronize_layer(layer, direction)
+            self.sync_manager.synchronize_layer(layer, direction, style_only=style_only)
             
             # Update layer icons - use the existing decorator from the plugin instance
             # This prevents creating multiple decorators that might add duplicate indicators

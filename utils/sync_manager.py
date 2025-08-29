@@ -199,18 +199,28 @@ class MapHubSyncManager:
         map_info = get_maphub_client().maps.get_map(map_id)['map']
         if 'visuals' not in map_info or not map_info['visuals']:
             return False
+
+        layer_properties = {key: layer.customProperty(key) for key in layer.customProperties().keys()}
+        print(layer_properties)
             
         apply_style_to_layer(layer, map_info['visuals'])
-        
+
+        # Transfer MapHub properties using the stored values
+        for key, value in layer_properties.items():
+            if key not in ["maphub/last_version_id", "maphub/last_sync", "maphub/last_style_hash"]:
+                layer.setCustomProperty(key, value)
+
         # Store the remote style hash for future comparison
         if 'qgis' in map_info['visuals']:
             # Use normalized XML for hash calculation to handle QGIS reordering elements
             style_hash = normalize_style_xml_and_hash(map_info['visuals']['qgis'])
             layer.setCustomProperty("maphub/last_style_hash", style_hash)
-        
+
+        print({key: layer.customProperty(key) for key in layer.customProperties().keys()})
+
         return True
     
-    def synchronize_layer(self, layer, direction="auto"):
+    def synchronize_layer(self, layer, direction="auto", style_only=False):
         """
         Synchronize a layer with its MapHub counterpart.
         
@@ -220,6 +230,7 @@ class MapHubSyncManager:
                 - "auto": Automatically determine direction based on status
                 - "push": Upload local changes to MapHub
                 - "pull": Download remote changes from MapHub
+            style_only: If True, only synchronize the style, not the entire file
         
         Raises:
             Exception: If synchronization fails
@@ -258,7 +269,7 @@ class MapHubSyncManager:
         try:
             if direction == "push":
                 # Check if only style has changed
-                if status == "style_changed_local":
+                if style_only:
                     # Only upload the style, not the entire file
                     if self._push_layer_style(layer, map_id):
                         # Update metadata
@@ -284,7 +295,7 @@ class MapHubSyncManager:
                 
             elif direction == "pull":
                 # Check if only style has changed
-                if status == "style_changed_remote":
+                if style_only:
                     # Only download and apply the style, not the entire file
                     if self._pull_and_apply_style(layer, map_id):
                         # Update sync timestamp
@@ -555,11 +566,19 @@ class MapHubSyncManager:
         )
         
         if response == QMessageBox.Save:
-            # Upload local style to MapHub
-            self.synchronize_layer(layer, "push")
+            # Upload local style to MapHub (style only)
+            map_id = layer.customProperty("maphub/map_id")
+            if self._push_layer_style(layer, map_id):
+                # Update metadata
+                layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
         elif response == QMessageBox.Open:
-            # Download remote style from MapHub
-            self.synchronize_layer(layer, "pull")
+            # Download remote style from MapHub (style only)
+            map_id = layer.customProperty("maphub/map_id")
+            if self._pull_and_apply_style(layer, map_id):
+                # Update sync timestamp
+                layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully updated from MapHub.")
     
     def show_error(self, message, exception=None):
         """

@@ -675,8 +675,11 @@ class MapBrowserDockWidget(QDockWidget):
             )
             return
             
+        # Check if this is a style-only operation
+        style_only = status in ["style_changed_local", "style_changed_remote", "style_changed_both"]
+        
         # Synchronize the layer
-        self.sync_manager.synchronize_layer(layer)
+        self.sync_manager.synchronize_layer(layer, "auto", style_only=style_only)
         
         # Refresh the tree item to update visual indicators
         self.refresh_map_item(map_data['id'])

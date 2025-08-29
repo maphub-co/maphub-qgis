@@ -416,6 +416,15 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
             file_path = f"{base_name}_{counter}{file_extension}"
             counter += 1
         
+        # Fetch complete map data including visuals if not already present
+        if 'visuals' not in map_data:
+            try:
+                complete_map_info = get_maphub_client().maps.get_map(map_data['id'])
+                if 'map' in complete_map_info and 'visuals' in complete_map_info['map']:
+                    map_data['visuals'] = complete_map_info['map']['visuals']
+            except Exception as e:
+                print(f"Error fetching map visuals: {str(e)}")
+        
         # Download the map with the selected format
         get_maphub_client().maps.download_map(map_data['id'], file_path, selected_format)
 

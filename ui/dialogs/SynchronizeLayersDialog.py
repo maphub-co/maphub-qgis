@@ -392,8 +392,13 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                             direction = "push"
                         else:  # "Use Remote Style"
                             direction = "pull"
-                    
-                    selected_items.append((layer, direction))
+                        # Set style_only flag to True for style conflicts
+                        selected_items.append((layer, direction, True))
+                    else:
+                        # Get the layer's status to check if it's a style-related status
+                        status = self.sync_manager.get_layer_sync_status(layer)
+                        style_only = status in ["style_changed_local", "style_changed_remote", "style_changed_both"]
+                        selected_items.append((layer, direction, style_only))
         
         # If no layers selected, show a message
         if not selected_items:
@@ -412,12 +417,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         
         # Synchronize selected layers
         success_count = 0
-        for i, (layer, direction) in enumerate(selected_items):
+        for i, (layer, direction, style_only) in enumerate(selected_items):
             progress.set_message(f"Synchronizing layer '{layer.name()}'...")
             progress.set_progress(i)
             
             try:
-                self.sync_manager.synchronize_layer(layer, direction)
+                self.sync_manager.synchronize_layer(layer, direction, style_only)
                 success_count += 1
             except Exception as e:
                 from ...utils.error_manager import ErrorManager

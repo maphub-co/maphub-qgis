@@ -503,6 +503,15 @@ class MapHubPlugin(QObject):
             if folder_id:
                 map_data['folder_id'] = folder_id
             
+            # Fetch complete map data including visuals
+            try:
+                from .utils.utils import get_maphub_client
+                complete_map_info = get_maphub_client().maps.get_map(map_id)
+                if 'map' in complete_map_info and 'visuals' in complete_map_info['map']:
+                    map_data['visuals'] = complete_map_info['map']['visuals']
+            except Exception as e:
+                print(f"Error fetching map visuals: {str(e)}")
+            
             # Call the download function
             download_map(map_data, self.iface.mainWindow())
         
