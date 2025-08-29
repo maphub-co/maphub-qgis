@@ -255,7 +255,13 @@ class MapHubLayerMenuProvider:
             # Perform synchronization
             self.sync_manager.synchronize_layer(layer, direction)
             
-            # Update layer icons
-            from .layer_decorator import MapHubLayerDecorator
-            layer_decorator = MapHubLayerDecorator(self.iface)
-            layer_decorator.update_layer_icons()
+            # Update layer icons - use the existing decorator from the plugin instance
+            # This prevents creating multiple decorators that might add duplicate indicators
+            from qgis.utils import plugins
+            if 'MapHubPlugin' in plugins:
+                plugins['MapHubPlugin'].layer_decorator.update_layer_icons()
+            else:
+                # Fallback if plugin instance is not available
+                from .layer_decorator import MapHubLayerDecorator
+                layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
+                layer_decorator.update_layer_icons()

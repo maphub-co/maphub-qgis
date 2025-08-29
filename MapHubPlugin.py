@@ -251,7 +251,7 @@ class MapHubPlugin(QObject):
         from .utils.sync_manager import MapHubSyncManager
         
         self.sync_manager = MapHubSyncManager(self.iface)
-        self.layer_decorator = MapHubLayerDecorator(self.iface)
+        self.layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
         self.layer_menu_provider = MapHubLayerMenuProvider(self.iface, self.sync_manager)
         
         # Initialize the status update scheduler

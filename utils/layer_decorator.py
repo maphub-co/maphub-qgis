@@ -14,15 +14,41 @@ class MapHubLayerDecorator:
     This class provides functionality to:
     - Add icon overlays to layers in the QGIS layer panel
     - Update icons based on synchronization status
+    
+    This class implements the Singleton pattern to ensure only one instance
+    exists throughout the plugin's lifecycle, preventing duplicate indicators.
     """
+    
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls, iface):
+        """
+        Get the singleton instance of the decorator.
+        
+        Args:
+            iface: The QGIS interface
+            
+        Returns:
+            MapHubLayerDecorator: The singleton instance
+        """
+        if cls._instance is None:
+            cls._instance = MapHubLayerDecorator(iface)
+        return cls._instance
 
     def __init__(self, iface):
         """
         Initialize the layer decorator.
+        
+        Note: This should not be called directly. Use get_instance() instead.
 
         Args:
             iface: The QGIS interface
         """
+        # If an instance already exists, don't reinitialize
+        if MapHubLayerDecorator._instance is not None:
+            return
+            
         self.iface = iface
         self.sync_manager = MapHubSyncManager(iface)
         self.icon_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icons')
@@ -40,17 +66,8 @@ class MapHubLayerDecorator:
         if not layer_tree_view:
             return
             
-        # Clear existing indicators
-        for indicator_id in list(self._indicators.keys()):
-            try:
-                layer_tree_view.removeIndicator(*self._indicators[indicator_id])
-            except RuntimeError:
-                # Node has been deleted, skip it
-                pass
-            except Exception:
-                # Handle any other exceptions
-                pass
-        self._indicators.clear()
+        # Clear existing indicators - use the cleanup method to ensure thorough removal
+        self.cleanup()
         
         # Process all layers
         root = QgsProject.instance().layerTreeRoot()
@@ -99,14 +116,17 @@ class MapHubLayerDecorator:
         # Store the status in the layer's custom properties for potential use elsewhere
         layer.setCustomProperty("maphub/sync_status", status)
 
+        # Create a unique ID for this layer's indicator (consistent regardless of status)
+        indicator_id = f"maphub_{layer.id()}"
+        
+        # Create indicator
+        indicator = QgsLayerTreeViewIndicator(layer_tree_view)
+        
         # Get icon for status
         icon = self._get_status_icon(status)
+        
         if icon:
-            # Create a unique ID for the status indicator
-            indicator_id = f"maphub_{layer.id()}_{status}"
-            
-            # Create and register the status indicator
-            indicator = QgsLayerTreeViewIndicator(layer_tree_view)
+            # Use status-specific icon and tooltip
             indicator.setIcon(icon)
             
             # Set tooltip based on status
@@ -114,36 +134,30 @@ class MapHubLayerDecorator:
                 indicator.setToolTip("Local changes need to be uploaded to MapHub")
             elif status == "remote_newer":
                 indicator.setToolTip("Remote changes need to be downloaded from MapHub")
-            elif status == "style_changed":
-                indicator.setToolTip("Style changes detected")
+            elif status == "style_changed" or status == "style_changed_local":
+                indicator.setToolTip("Local style changes need to be uploaded to MapHub")
+            elif status == "style_changed_remote":
+                indicator.setToolTip("Remote style changes need to be downloaded from MapHub")
+            elif status == "style_changed_both":
+                indicator.setToolTip("Style conflict - both local and remote styles have changed")
             elif status == "file_missing":
                 indicator.setToolTip("Local file is missing")
             elif status == "remote_error":
                 indicator.setToolTip("Error checking remote status")
-            
-            # Add the status indicator to the layer
-            layer_tree_view.addIndicator(node, indicator)
-            
-            # Store the status indicator for later removal
-            self._indicators[indicator_id] = (node, indicator)
+            elif status == "processing":
+                indicator.setToolTip("Map is being processed on MapHub")
         else:
-            # Always add a chain icon to indicate the layer is connected to MapHub
+            # Use chain icon for connected layers with no specific status
             chain_icon_path = os.path.join(self.icon_dir, 'chain.svg')
             chain_icon = QIcon(chain_icon_path)
-
-            # Create a unique ID for the chain indicator
-            chain_indicator_id = f"maphub_chain_{layer.id()}"
-
-            # Create and register the chain indicator
-            chain_indicator = QgsLayerTreeViewIndicator(layer_tree_view)
-            chain_indicator.setIcon(chain_icon)
-            chain_indicator.setToolTip("Layer is connected to MapHub")
-
-            # Add the chain indicator to the layer
-            layer_tree_view.addIndicator(node, chain_indicator)
-
-            # Store the chain indicator for later removal
-            self._indicators[chain_indicator_id] = (node, chain_indicator)
+            indicator.setIcon(chain_icon)
+            indicator.setToolTip("Layer is connected to MapHub")
+        
+        # Add the indicator to the layer
+        layer_tree_view.addIndicator(node, indicator)
+        
+        # Store the indicator for later removal
+        self._indicators[indicator_id] = (node, indicator)
 
 
     def cleanup(self):
@@ -189,12 +203,18 @@ class MapHubLayerDecorator:
             icon_path = os.path.join(self.icon_dir, 'upload.svg')
         elif status == "remote_newer":
             icon_path = os.path.join(self.icon_dir, 'download.svg')
-        elif status == "style_changed":
+        elif status == "style_changed" or status == "style_changed_local":
             icon_path = os.path.join(self.icon_dir, 'style.svg')
+        elif status == "style_changed_remote":
+            icon_path = os.path.join(self.icon_dir, 'style.svg')  # Could use a different icon if available
+        elif status == "style_changed_both":
+            icon_path = os.path.join(self.icon_dir, 'style.svg')  # Could use a different icon if available
         elif status == "file_missing":
             icon_path = os.path.join(self.icon_dir, 'error.svg')
         elif status == "remote_error":
             icon_path = os.path.join(self.icon_dir, 'warning.svg')
+        elif status == "processing":
+            icon_path = os.path.join(self.icon_dir, 'refresh.svg')
             
         # Create and cache icon if path exists
         if icon_path and os.path.exists(icon_path):

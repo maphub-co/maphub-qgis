@@ -428,9 +428,16 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Close progress dialog
         progress.accept()
         
-        # Update layer icons
-        layer_decorator = MapHubLayerDecorator(self.iface)
-        layer_decorator.update_layer_icons()
+        # Update layer icons - use the existing decorator from the plugin instance
+        # This prevents creating multiple decorators that might add duplicate indicators
+        from qgis.utils import plugins
+        if 'MapHubPlugin' in plugins:
+            plugins['MapHubPlugin'].layer_decorator.update_layer_icons()
+        else:
+            # Fallback if plugin instance is not available
+            from ...utils.layer_decorator import MapHubLayerDecorator
+            layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
+            layer_decorator.update_layer_icons()
         
         # Show success message
         QMessageBox.information(
