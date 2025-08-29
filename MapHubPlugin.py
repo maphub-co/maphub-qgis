@@ -226,7 +226,7 @@ class MapHubPlugin(QObject):
         )
 
         self.add_action(
-            os.path.join(self.plugin_dir, 'icons', 'icon.png'),
+            os.path.join(self.plugin_dir, 'icons', 'browser.svg'),
             text=self.tr(u'MapHub Browser'),
             callback=self.show_map_browser,
             parent=self.iface.mainWindow(),
@@ -236,7 +236,7 @@ class MapHubPlugin(QObject):
         # Add settings action
         self.add_action(
             os.path.join(self.plugin_dir, 'icons', 'settings.svg'),
-            text=self.tr(u'Settings'),
+            text=self.tr(u'MapHub Settings'),
             callback=self.show_settings,
             parent=self.iface.mainWindow(),
             add_to_toolbar=True
