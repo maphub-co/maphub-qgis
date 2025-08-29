@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtCore import QSettings, QStandardPaths
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtWidgets import QFileDialog, QLineEdit
 from qgis.PyQt import uic
 from pathlib import Path
 
@@ -50,6 +50,7 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         self.buttonBox.accepted.connect(self.on_accepted)
         self.refreshNowButton.clicked.connect(self.on_refresh_now_clicked)
         self.browseButton.clicked.connect(self.on_browse_clicked)
+        self.toolButton_showHide.toggled.connect(self.toggle_password_visibility)
         
         # Load settings
         self.load_settings()
@@ -63,6 +64,13 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         if self.on_settings_changed:
             self.on_settings_changed()
     
+    def toggle_password_visibility(self, checked):
+        """Toggle the visibility of the API key text."""
+        if checked:
+            self.apiKeyLineEdit.setEchoMode(QLineEdit.Normal)
+        else:
+            self.apiKeyLineEdit.setEchoMode(QLineEdit.Password)
+            
     def load_settings(self):
         """Load settings from QSettings."""
         settings = QSettings()
@@ -83,6 +91,9 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
         self.defaultLocationLineEdit.setText(default_location)
         
         # Load API settings
+        api_key = settings.value("MapHubPlugin/api_key", "", type=str)
+        self.apiKeyLineEdit.setText(api_key)
+        
         base_url = settings.value("MapHubPlugin/base_url", "", type=str)
         self.baseUrlLineEdit.setText(base_url)
         
@@ -101,6 +112,10 @@ class SettingsDialog(MapHubBaseDialog, FORM_CLASS):
                          self.defaultLocationLineEdit.text())
         
         # Save API settings
+        api_key = self.apiKeyLineEdit.text().strip()
+        if api_key:
+            settings.setValue("MapHubPlugin/api_key", api_key)
+        
         base_url = self.baseUrlLineEdit.text().strip()
         if base_url and len(base_url) > 0:
             settings.setValue("MapHubPlugin/base_url", base_url)
