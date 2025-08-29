@@ -314,8 +314,8 @@ class MapHubSyncManager:
 
                 # Transfer MapHub properties using the stored values
                 for key, value in layer_properties.items():
-                    print(key, value)
-                    new_layer.setCustomProperty(key, value)
+                    if key not in ["maphub/last_version_id", "maphub/last_sync", "maphub/last_style_hash"]:
+                        new_layer.setCustomProperty(key, value)
 
 
                 self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer_name}' successfully updated from MapHub.")
