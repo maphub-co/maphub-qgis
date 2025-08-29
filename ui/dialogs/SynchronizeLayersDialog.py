@@ -106,8 +106,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             return
         
         # Create dictionaries to store layers by status
-        download_layers = []  # remote_newer
-        upload_layers = []    # local_modified, style_changed
+        download_layers = []  # remote_newer, style_changed_remote
+        upload_layers = []    # local_modified, style_changed_local, style_changed_both
         not_connected_layers = []
         in_sync_layers = []   # in_sync, file_missing, remote_error, processing
         
@@ -121,10 +121,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             
             status = self.sync_manager.get_layer_sync_status(layer)
             
-            if status == "remote_newer":
+            if status == "remote_newer" or status == "style_changed_remote":
                 download_layers.append((layer, status))
-            elif status in ["local_modified", "style_changed"]:
+            elif status == "local_modified" or status == "style_changed_local":
                 upload_layers.append((layer, status))
+            elif status == "style_changed_both":
+                upload_layers.append((layer, status))  # Default to upload, but will show conflict resolution UI
             else:
                 in_sync_layers.append((layer, status))
         

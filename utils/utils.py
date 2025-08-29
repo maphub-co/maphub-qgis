@@ -1,6 +1,7 @@
 import sys
 import traceback
 import os
+import hashlib
 from pathlib import Path
 from typing import Dict, Any
 from xml.etree import ElementTree as ET
@@ -329,6 +330,67 @@ def layer_position(project, layer):
             break
 
     return position
+
+
+def normalize_style_xml_and_hash(style_xml: str) -> str:
+    """
+    Normalize XML by extracting and sorting the renderer section,
+    then generate an MD5 hash of the normalized XML.
+    
+    This function addresses the issue where QGIS may rearrange the order of keywords
+    in tags when exporting styles, causing hash comparison failures even when styles
+    are functionally equivalent.
+    
+    Args:
+        style_xml (str): The XML string to normalize and hash
+        
+    Returns:
+        str: MD5 hash of the normalized XML
+    """
+    if not style_xml:
+        return ""
+        
+    try:
+        # Remove the DOCTYPE declaration as it's not part of the functional style
+        if '<!DOCTYPE' in style_xml:
+            style_xml = style_xml[style_xml.find('<qgis'):]
+        
+        # Parse the XML
+        root = ET.fromstring(style_xml)
+        
+        # Extract only the renderer section which contains the actual styling
+        renderer = root.find('.//renderer-v2')
+        if renderer is None:
+            # If no renderer found, fall back to the original method
+            return hashlib.md5(style_xml.encode()).hexdigest()
+        
+        def sort_element(elem):
+            # Sort attributes
+            attrib = dict(sorted(elem.attrib.items()))
+            elem.attrib.clear()
+            for key, value in sorted(attrib.items()):
+                elem.set(key, value)
+            
+            # Sort children by tag and then recursively sort their content
+            children = sorted(list(elem), key=lambda child: child.tag)
+            for child in list(elem):
+                elem.remove(child)
+            for child in children:
+                sort_element(child)
+                elem.append(child)
+        
+        # Sort the renderer tree
+        sort_element(renderer)
+        
+        # Convert back to string
+        normalized_xml = ET.tostring(renderer, encoding='unicode')
+        
+        # Calculate and return the hash
+        return hashlib.md5(normalized_xml.encode()).hexdigest()
+    except Exception as e:
+        print(f"Error normalizing XML: {str(e)}")
+        # If normalization fails, fall back to direct hashing
+        return hashlib.md5(style_xml.encode()).hexdigest()
 
 
 def place_layer_at_position(project, layer, position):

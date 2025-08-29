@@ -134,7 +134,7 @@ class MapHubLayerDecorator:
                 indicator.setToolTip("Local changes need to be uploaded to MapHub")
             elif status == "remote_newer":
                 indicator.setToolTip("Remote changes need to be downloaded from MapHub")
-            elif status == "style_changed" or status == "style_changed_local":
+            elif status == "style_changed_local":
                 indicator.setToolTip("Local style changes need to be uploaded to MapHub")
             elif status == "style_changed_remote":
                 indicator.setToolTip("Remote style changes need to be downloaded from MapHub")
@@ -203,7 +203,7 @@ class MapHubLayerDecorator:
             icon_path = os.path.join(self.icon_dir, 'upload.svg')
         elif status == "remote_newer":
             icon_path = os.path.join(self.icon_dir, 'download.svg')
-        elif status == "style_changed" or status == "style_changed_local":
+        elif status == "style_changed_local":
             icon_path = os.path.join(self.icon_dir, 'style.svg')
         elif status == "style_changed_remote":
             icon_path = os.path.join(self.icon_dir, 'style.svg')  # Could use a different icon if available

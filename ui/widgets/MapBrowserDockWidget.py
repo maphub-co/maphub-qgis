@@ -765,9 +765,15 @@ class MapBrowserDockWidget(QDockWidget):
         elif status == "remote_newer":
             icon_path = os.path.join(self.icon_dir, 'download.svg')
             tooltip = "Remote changes need to be downloaded from MapHub"
-        elif status == "style_changed":
+        elif status == "style_changed_local":
             icon_path = os.path.join(self.icon_dir, 'style.svg')
-            tooltip = "Style changes detected"
+            tooltip = "Local style changes need to be uploaded to MapHub"
+        elif status == "style_changed_remote":
+            icon_path = os.path.join(self.icon_dir, 'style.svg')
+            tooltip = "Remote style changes need to be downloaded from MapHub"
+        elif status == "style_changed_both":
+            icon_path = os.path.join(self.icon_dir, 'style.svg')
+            tooltip = "Style conflict - both local and remote styles have changed"
         elif status == "file_missing":
             icon_path = os.path.join(self.icon_dir, 'error.svg')
             tooltip = "Local file is missing"

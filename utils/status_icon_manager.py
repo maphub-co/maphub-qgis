@@ -21,7 +21,9 @@ class StatusIconManager:
         self._status_icons = {
             "local_modified": "upload.svg",
             "remote_newer": "download.svg",
-            "style_changed": "style.svg",
+            "style_changed_local": "style.svg",
+            "style_changed_remote": "style.svg",
+            "style_changed_both": "style.svg",
             "file_missing": "error.svg",
             "remote_error": "warning.svg",
             "in_sync": "check.svg",
@@ -32,7 +34,9 @@ class StatusIconManager:
         self._status_tooltips = {
             "local_modified": "Local changes need to be uploaded to MapHub",
             "remote_newer": "Remote changes need to be downloaded from MapHub",
-            "style_changed": "Style changes detected",
+            "style_changed_local": "Local style changes need to be uploaded to MapHub",
+            "style_changed_remote": "Remote style changes need to be downloaded from MapHub",
+            "style_changed_both": "Style conflict - both local and remote styles have changed",
             "file_missing": "Local file is missing",
             "remote_error": "Error checking remote status",
             "in_sync": "Layer is in sync with MapHub",
