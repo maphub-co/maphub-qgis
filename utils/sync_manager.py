@@ -223,8 +223,8 @@ class MapHubSyncManager:
                 layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                 
                 # Update the stored version ID
-                if 'id' in new_version:
-                    layer.setCustomProperty("maphub/last_version_id", str(new_version.get('id')))
+                if 'task_id' in new_version:
+                    layer.setCustomProperty("maphub/last_version_id", str(new_version.get('task_id')))
 
                 self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer.name()}' successfully uploaded to MapHub.")
                 
