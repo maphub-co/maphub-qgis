@@ -2,10 +2,8 @@ import hashlib
 import os
 import tempfile
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from PyQt5.QtWidgets import QMessageBox
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
 from ..maphub.exceptions import APIException
@@ -72,7 +70,9 @@ class MapHubSyncManager:
             - "file_missing": Local file is missing
             - "local_modified": Local file has been modified since last sync
             - "remote_newer": Remote map has been updated since last sync
-            - "style_changed": Style has changed since last sync
+            - "style_changed_local": Local style has changed since last sync
+            - "style_changed_remote": Remote style has changed since last sync
+            - "style_changed_both": Both local and remote styles have changed since last sync
             - "remote_error": Error checking remote status
             - "in_sync": Layer is in sync with MapHub
         """
@@ -95,11 +95,17 @@ class MapHubSyncManager:
         # Check if remote has newer version
         try:
             map_id = layer.customProperty("maphub/map_id")
-            map_info = get_maphub_client().maps.get_map(map_id)
-            if 'updated_at' in map_info:
-                remote_update_time = datetime.fromisoformat(map_info.get('updated_at'))
-                if last_sync and remote_update_time > datetime.fromisoformat(last_sync):
-                    return "remote_newer"
+            map_info = get_maphub_client().maps.get_map(map_id)['map']
+            
+            # Get the latest version ID from the map info
+            latest_version_id = map_info.get('latest_version_id')
+            
+            # Get the last synced version ID from layer properties
+            last_synced_version_id = layer.customProperty("maphub/last_version_id")
+            
+            # If we have both IDs and they're different, a new version exists
+            if latest_version_id and last_synced_version_id and latest_version_id != last_synced_version_id:
+                return "remote_newer"
         except APIException as e:
             print(f"Error checking remote status: {e}")
             if e.status_code == 404 and "is not processed yet" in e.message:
@@ -112,7 +118,6 @@ class MapHubSyncManager:
         
         # Check if styles differ
         # Calculate the current style hash on demand from the local layer
-        from ..utils.utils import get_layer_styles_as_json
         local_style_dict = get_layer_styles_as_json(layer, {})
         
         # Only use the QGIS field for style comparison
@@ -121,8 +126,20 @@ class MapHubSyncManager:
             
             if 'visuals' in map_info and map_info['visuals'] and 'qgis' in map_info['visuals']:
                 remote_style_hash = hashlib.md5(map_info['visuals']['qgis'].encode()).hexdigest()
+                
                 if local_style_hash != remote_style_hash:
-                    return "style_changed"
+                    # Get the last synced style hash (stored during last sync)
+                    last_synced_hash = layer.customProperty("maphub/last_style_hash")
+                    
+                    if not last_synced_hash:
+                        # First sync or no stored hash, can't determine which side changed
+                        return "style_changed_remote"
+                    elif local_style_hash != last_synced_hash and remote_style_hash != last_synced_hash:
+                        return "style_changed_both"
+                    elif local_style_hash != last_synced_hash:
+                        return "style_changed_local"
+                    elif remote_style_hash != last_synced_hash:
+                        return "style_changed_remote"
         
         return "in_sync"
     
@@ -171,10 +188,14 @@ class MapHubSyncManager:
             elif status == "processing":
                 self.show_error("This map is still being processed by MapHub. Please try again later.")
                 return
-            elif status == "style_changed":
-                # For now, just use push direction for style changes
-                # In the future, this would show a style conflict resolution dialog
-                direction = "push"
+            elif status == "style_changed_local":
+                direction = "push"  # Local changes take precedence
+            elif status == "style_changed_remote":
+                direction = "pull"  # Remote changes take precedence
+            elif status == "style_changed_both":
+                # For conflicts, show a resolution dialog
+                self.show_style_conflict_resolution_dialog(layer)
+                return
             elif status == "in_sync":
                 self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' is already in sync with MapHub.")
                 return
@@ -186,15 +207,24 @@ class MapHubSyncManager:
             if direction == "push":
                 # Upload local changes to MapHub
                 local_path = layer.customProperty("maphub/local_path")
-                get_maphub_client().versions.upload_version(map_id, "QGIS upload", local_path)
+                new_version = get_maphub_client().versions.upload_version(map_id, "QGIS upload", local_path)
                 
                 # Update style if needed
                 style_dict = self.get_layer_style_as_dict(layer)
                 if style_dict:
                     get_maphub_client().maps.set_visuals(map_id, style_dict)
+                    
+                    # Store the current style hash for future comparison
+                    if 'qgis' in style_dict:
+                        style_hash = hashlib.md5(style_dict['qgis'].encode()).hexdigest()
+                        layer.setCustomProperty("maphub/last_style_hash", style_hash)
                 
                 # Update metadata
                 layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                
+                # Update the stored version ID
+                if 'id' in new_version:
+                    layer.setCustomProperty("maphub/last_version_id", str(new_version.get('id')))
 
                 self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer.name()}' successfully uploaded to MapHub.")
                 
@@ -246,27 +276,48 @@ class MapHubSyncManager:
                 layer_name = layer.name()
                 layer_type = "raster" if isinstance(layer, QgsRasterLayer) else "vector"
                 
-                # Remove current layer
-                QgsProject.instance().removeMapLayer(layer.id())
-                
-                # Add new layer
-                if layer_type == "raster":
-                    new_layer = self.iface.addRasterLayer(local_path, layer_name)
-                else:
-                    new_layer = self.iface.addVectorLayer(local_path, layer_name, "ogr")
-                
-                # Transfer MapHub properties
-                for key in ["maphub/map_id", "maphub/folder_id", "maphub/local_path"]:
-                    new_layer.setCustomProperty(key, layer.customProperty(key))
-                
+                # Store all needed properties from the layer before removing it
+                layer_properties = {key: layer.customProperty(key) for key in layer.customProperties().keys()}
+
+                try:
+                    # Remove current layer
+                    QgsProject.instance().removeMapLayer(layer.id())
+                    
+                    # Add new layer
+                    if layer_type == "raster":
+                        new_layer = self.iface.addRasterLayer(local_path, layer_name)
+                    else:
+                        new_layer = self.iface.addVectorLayer(local_path, layer_name, "ogr")
+                        
+                    if not new_layer or not new_layer.isValid():
+                        raise Exception(f"Failed to create new layer from {local_path}")
+                except Exception as e:
+                    self.show_error(f"Error reloading layer: {str(e)}", e)
+                    return
+
                 # Get and apply remote style
-                map_info = get_maphub_client().maps.get_map(map_id)
+                map_info = get_maphub_client().maps.get_map(map_id)['map']
                 if 'visuals' in map_info and map_info['visuals']:
                     apply_style_to_layer(new_layer, map_info['visuals'])
+                    
+                    # Store the remote style hash for future comparison
+                    if 'qgis' in map_info['visuals']:
+                        style_hash = hashlib.md5(map_info['visuals']['qgis'].encode()).hexdigest()
+                        new_layer.setCustomProperty("maphub/last_style_hash", style_hash)
 
                 # Update sync timestamp
                 new_layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                 
+                # Update the stored version ID
+                if 'latest_version_id' in map_info:
+                    new_layer.setCustomProperty("maphub/last_version_id", str(map_info.get('latest_version_id')))
+
+                # Transfer MapHub properties using the stored values
+                for key, value in layer_properties.items():
+                    print(key, value)
+                    new_layer.setCustomProperty(key, value)
+
+
                 self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer_name}' successfully updated from MapHub.")
                 
         except Exception as e:
@@ -375,6 +426,25 @@ class MapHubSyncManager:
         layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
         layer.setCustomProperty("maphub/local_path", local_path)
         
+        # Store initial version ID for future comparison
+        try:
+            # Get the map info to retrieve the latest version ID
+            map_info = get_maphub_client().maps.get_map(map_id)['map']
+            if 'latest_version_id' in map_info:
+                layer.setCustomProperty("maphub/last_version_id", str(map_info.get('latest_version_id')))
+        except Exception as e:
+            print(f"Error storing initial version ID: {e}")
+        
+        # Store initial style hash for future comparison
+        try:
+            # Get the current style hash
+            style_dict = self.get_layer_style_as_dict(layer)
+            if 'qgis' in style_dict:
+                style_hash = hashlib.md5(style_dict['qgis'].encode()).hexdigest()
+                layer.setCustomProperty("maphub/last_style_hash", style_hash)
+        except Exception as e:
+            print(f"Error storing initial style hash: {e}")
+        
         self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' connected to MapHub.")
     
     def disconnect_layer(self, layer):
@@ -403,8 +473,35 @@ class MapHubSyncManager:
         layer.removeCustomProperty("maphub/workspace_id")
         layer.removeCustomProperty("maphub/last_sync")
         layer.removeCustomProperty("maphub/local_path")
+        layer.removeCustomProperty("maphub/last_style_hash")
+        layer.removeCustomProperty("maphub/last_version_id")
         
         self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' disconnected from MapHub.")
+    
+    def show_style_conflict_resolution_dialog(self, layer):
+        """
+        Show a dialog for resolving style conflicts when both local and remote styles have changed.
+        
+        Args:
+            layer: The QGIS layer with style conflicts
+        """
+        from PyQt5.QtWidgets import QMessageBox
+        
+        response = QMessageBox.question(
+            self.iface.mainWindow(),
+            "Style Conflict",
+            f"The layer '{layer.name()}' has style changes on both local and remote versions.\n\n"
+            "How would you like to resolve this conflict?",
+            QMessageBox.Save | QMessageBox.Open | QMessageBox.Cancel,
+            QMessageBox.Cancel
+        )
+        
+        if response == QMessageBox.Save:
+            # Upload local style to MapHub
+            self.synchronize_layer(layer, "push")
+        elif response == QMessageBox.Open:
+            # Download remote style from MapHub
+            self.synchronize_layer(layer, "pull")
     
     def show_error(self, message, exception=None):
         """

@@ -109,8 +109,20 @@ def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:
     qgis_doc = QDomDocument()
     error_message = []  # Use a list instead of a string for output parameter
     layer.exportNamedStyle(qgis_doc)
-
-    # Store QGIS style XML
+    
+    # Filter out MapHub-specific properties before storing
+    root = qgis_doc.documentElement()
+    custom_props = root.elementsByTagName("customproperties").item(0)
+    if not custom_props.isNull():
+        options = custom_props.firstChildElement("Option")
+        if not options.isNull():
+            option_list = options.childNodes()
+            for i in range(option_list.count() - 1, -1, -1):
+                option = option_list.item(i).toElement()
+                if option.attribute("name").startswith("maphub/"):
+                    options.removeChild(option_list.item(i))
+    
+    # Store filtered QGIS style XML
     visuals["qgis"] = qgis_doc.toString()
 
     # Get SLD style format

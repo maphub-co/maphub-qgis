@@ -129,11 +129,19 @@ class MapHubLayerMenuProvider:
                 update_local_action = QAction("Update from MapHub", menu)
                 update_local_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Download remote changes from MapHub", "pull"))
                 menu.addAction(update_local_action)
-            elif status == "style_changed":
-                resolve_style_action = QAction("Resolve Style Differences", menu)
-                resolve_style_action.triggered.connect(lambda: self.show_style_resolution_dialog(layer))
+            elif status == "style_changed_local":
+                update_style_action = QAction("Upload Style to MapHub", menu)
+                update_style_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Upload local style to MapHub", "push"))
+                menu.addAction(update_style_action)
+            elif status == "style_changed_remote":
+                update_style_action = QAction("Download Style from MapHub", menu)
+                update_style_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Download remote style from MapHub", "pull"))
+                menu.addAction(update_style_action)
+            elif status == "style_changed_both":
+                resolve_style_action = QAction("Resolve Style Conflict", menu)
+                resolve_style_action.triggered.connect(lambda: self.sync_manager.show_style_conflict_resolution_dialog(layer))
                 menu.addAction(resolve_style_action)
-                
+
             # Always add these options
             sync_action = QAction("Synchronize with MapHub", menu)
             sync_action.triggered.connect(lambda: self.confirm_sync_action(layer, "Synchronize with MapHub", "auto"))
