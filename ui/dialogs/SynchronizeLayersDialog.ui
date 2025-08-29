@@ -59,12 +59,12 @@
      </property>
      <column>
       <property name="text">
-       <string>Sync</string>
+       <string>Layer Name</string>
       </property>
      </column>
      <column>
       <property name="text">
-       <string>Layer Name</string>
+       <string>Sync</string>
       </property>
      </column>
      <column>

@@ -165,12 +165,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             if self.layersTree.topLevelItemCount() > 0:
                 spacing_item = QTreeWidgetItem(self.layersTree)
                 spacing_item.setFlags(Qt.NoItemFlags)  # Make it non-selectable
-                spacing_item.setText(1, "")  # Empty text
+                spacing_item.setText(0, "")  # Empty text
                 spacing_item.setSizeHint(0, QSize(0, 10))  # Set height to 10 pixels
             
             # Create group header item
             group_item = QTreeWidgetItem(self.layersTree)
-            group_item.setText(1, group["title"])
+            group_item.setText(0, group["title"])
             group_item.setFlags(Qt.ItemIsEnabled)
             
             # Set background color for all columns
@@ -178,7 +178,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 group_item.setBackground(col, QBrush(group["color"]))
             
             # Make font bold for header
-            font = group_item.font(1)
+            font = group_item.font(0)
             font.setBold(True)
             for col in range(3):
                 group_item.setFont(col, font)
@@ -214,26 +214,32 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
     def _add_connected_layer(self, parent_item, layer, status):
         """Add a connected layer to the tree under the specified parent item."""
         item = QTreeWidgetItem(parent_item)
-        item.setText(1, layer.name())
+        item.setText(0, layer.name())
         
         # Set action based on status
         if status == "local_modified":
-            item.setText(0, "Upload to MapHub")
+            item.setText(1, "Upload to MapHub")
         elif status == "remote_newer":
-            item.setText(0, "Download from MapHub")
+            item.setText(1, "Download from MapHub")
         elif status == "processing":
-            item.setText(0, "Processing on MapHub")
-        elif status == "style_changed":
+            item.setText(1, "Processing on MapHub")
+        elif status == "style_changed_local":
+            item.setText(1, "Upload Style to MapHub")
+        elif status == "style_changed_remote":
+            item.setText(1, "Download Style from MapHub")
+        elif status == "style_changed_both":
             # Add style resolution combo box
             style_combo = QComboBox()
             style_combo.addItems(["Keep Local Style", "Use Remote Style"])
-            self.layersTree.setItemWidget(item, 0, style_combo)
+            style_combo.setMaximumWidth(80)
+            style_combo.setMaximumHeight(20)
+            self.layersTree.setItemWidget(item, 1, style_combo)
         elif status == "in_sync":
-            item.setText(0, "In Sync")
+            item.setText(1, "In Sync")
         elif status == "file_missing":
-            item.setText(0, "File Missing")
+            item.setText(1, "File Missing")
         elif status == "remote_error":
-            item.setText(0, "Remote Error")
+            item.setText(1, "Remote Error")
         
         # Add checkbox for selection (except for in-sync layers)
         if status not in ["in_sync", "file_missing", "remote_error", "processing"]:
@@ -245,19 +251,19 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             item.setSelected(False)
         
         # Store layer reference
-        item.setData(1, Qt.UserRole, layer)
+        item.setData(0, Qt.UserRole, layer)
     
     def _add_not_connected_layer(self, parent_item, layer):
         """Add a non-connected layer to the tree under the specified parent item."""
         item = QTreeWidgetItem(parent_item)
-        item.setText(1, layer.name())
+        item.setText(0, layer.name())
         
         # Gray out the text
         for col in range(3):
             item.setForeground(col, QBrush(QColor(128, 128, 128)))
         
         # Add "Not Connected" text in the action column
-        item.setText(0, "Not Connected")
+        item.setText(1, "Not Connected")
         
         # Add disabled checkbox
         checkbox = QCheckBox()
@@ -267,7 +273,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         item.setSelected(False)
         
         # Store layer reference
-        item.setData(1, Qt.UserRole, layer)
+        item.setData(0, Qt.UserRole, layer)
     
     def _add_status_icon(self, item, column, status):
         """
@@ -301,10 +307,10 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Find the "LAYERS NOT CONNECTED" group
         for i in range(self.layersTree.topLevelItemCount()):
             group_item = self.layersTree.topLevelItem(i)
-            if group_item.text(1) == "LAYERS NOT CONNECTED":
+            if group_item.text(0) == "LAYERS NOT CONNECTED":
                 for j in range(group_item.childCount()):
                     child_item = group_item.child(j)
-                    layer = child_item.data(1, Qt.UserRole)
+                    layer = child_item.data(0, Qt.UserRole)
                     not_connected_layers.append(layer)
                 break
         
@@ -371,13 +377,13 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 child_item = group_item.child(j)
                 checkbox = self.layersTree.itemWidget(child_item, 2)
                 if checkbox and checkbox.isChecked():
-                    layer = child_item.data(1, Qt.UserRole)
+                    layer = child_item.data(0, Qt.UserRole)
                     
                     # Get synchronization direction
                     direction = "auto"
                     
                     # Check if this is a style conflict
-                    widget = self.layersTree.itemWidget(child_item, 0)
+                    widget = self.layersTree.itemWidget(child_item, 1)
                     if isinstance(widget, QComboBox):
                         # This is a style conflict, get the selected option
                         if widget.currentText() == "Keep Local Style":
