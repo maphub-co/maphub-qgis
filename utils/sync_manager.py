@@ -401,11 +401,18 @@ class MapHubSyncManager:
             if '|' in layer_path:  # Handle layers with query parameters
                 layer_path = layer_path.split('|')[0]
 
+            # Determine if it's a file-based layer or a database layer
+            is_file_based = os.path.exists(layer_path)
+
             # Determine the file extension based on layer type
             if isinstance(layer, QgsVectorLayer):
-                file_extension = os.path.splitext(layer_path)[1]
-                if not file_extension:
-                    file_extension = '.gpkg'  # Default to GeoPackage
+                if is_file_based:
+                    file_extension = os.path.splitext(layer_path)[1]
+                    if not file_extension:
+                        file_extension = '.gpkg'  # Default to GeoPackage
+                else:
+                    # For database layers (like PostGIS), use FlatGeobuf
+                    file_extension = '.fgb'
             elif isinstance(layer, QgsRasterLayer):
                 file_extension = os.path.splitext(layer_path)[1]
                 if not file_extension:
@@ -416,8 +423,23 @@ class MapHubSyncManager:
             # Create a temporary file path
             temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
 
-            # Copy the layer file to the temporary directory
-            if os.path.exists(layer_path):
+            # Handle the layer based on its type and source
+            if isinstance(layer, QgsVectorLayer) and not is_file_based:
+                # For database layers (like PostGIS), export to file format
+                from qgis.core import QgsVectorFileWriter
+                
+                # Export to FlatGeobuf format
+                error = QgsVectorFileWriter.writeAsVectorFormat(
+                    layer,
+                    temp_file,
+                    "UTF-8",
+                    layer.crs(),
+                    "FlatGeobuf"
+                )
+                
+                if error[0] != QgsVectorFileWriter.NoError:
+                    raise Exception(f"Error exporting layer: {error[0]}")
+            elif is_file_based:
                 # For file-based layers, copy the file
                 with open(layer_path, 'rb') as src_file:
                     with open(temp_file, 'wb') as dst_file:
@@ -433,8 +455,8 @@ class MapHubSyncManager:
                                 with open(os.path.join(temp_dir, f"{map_name}{ext}"), 'wb') as dst_file:
                                     dst_file.write(src_file.read())
             else:
-                # For memory layers or other non-file layers, save to a new file
-                raise Exception("Layer is not file-based. Please save it to a file first.")
+                # For memory layers or other non-file layers that aren't handled above
+                raise Exception("Layer is not file-based and couldn't be exported. Please save it to a file first.")
 
             # Get the layer style
             style_json = get_layer_styles_as_json(layer, {})
@@ -456,17 +478,39 @@ class MapHubSyncManager:
 
             # Connect the layer to the uploaded map
             if map_id:
-                # Get the layer's source path
-                source_path = layer.source()
-                if '|' in source_path:  # Handle layers with query parameters
-                    source_path = source_path.split('|')[0]
+                # For database layers, store the temp file path as the local path
+                # This allows future synchronization to work with the exported file
+                if isinstance(layer, QgsVectorLayer) and not is_file_based:
+                    # Create a permanent copy of the temporary file in the default download location
+                    default_dir = get_default_download_location()
+                    permanent_path = os.path.join(str(default_dir), f"{map_name}{file_extension}")
+                    
+                    # Ensure filename is unique
+                    counter = 1
+                    base_name = os.path.splitext(permanent_path)[0]
+                    while os.path.exists(permanent_path):
+                        permanent_path = f"{base_name}_{counter}{file_extension}"
+                        counter += 1
+                    
+                    # Copy the temporary file to the permanent location
+                    with open(temp_file, 'rb') as src_file:
+                        with open(permanent_path, 'wb') as dst_file:
+                            dst_file.write(src_file.read())
+                    
+                    # Use the permanent path for connection
+                    local_path = permanent_path
+                else:
+                    # Get the layer's source path
+                    local_path = layer.source()
+                    if '|' in local_path:  # Handle layers with query parameters
+                        local_path = local_path.split('|')[0]
 
                 # Connect the layer to MapHub
                 self.connect_layer(
                     layer,
                     map_id,
                     folder_id,
-                    source_path
+                    local_path
                 )
 
     def connect_layer(self, layer, map_id, folder_id, local_path):
