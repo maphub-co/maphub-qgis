@@ -6,6 +6,7 @@ from PyQt5.QtGui import QIcon
 from qgis.PyQt import uic
 from qgis.core import QgsProject
 
+from ...maphub.exceptions import APIException
 from ...utils.sync_manager import MapHubSyncManager
 from .MapHubBaseDialog import MapHubBaseDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
@@ -147,6 +148,9 @@ class BatchConnectLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 )
 
                 success_count += 1
+            except APIException:
+                # Re-raise APIException to be handled by the decorator
+                raise
             except Exception as e:
                 ErrorManager.show_error(f"Failed to connect layer '{layer.name()}'", e, self)
 
