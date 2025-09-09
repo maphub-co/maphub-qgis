@@ -27,7 +27,9 @@ from qgis.core import (
     QgsDataItemProviderRegistry,
     QgsApplication,
     Qgis,
-    QgsMimeDataUtils
+    QgsMimeDataUtils,
+    QgsDataCollectionItem,
+    QgsLayerItem
 )
 from qgis.gui import QgsGui, QgsCustomDropHandler
 from . import resources
@@ -84,9 +86,9 @@ class MaphubRootItem(QgsDataItem):
         return children
 
 
-class MaphubWorkspaceItem(QgsDataItem):
+class MaphubWorkspaceItem(QgsDataCollectionItem):
     def __init__(self, label, path, workspace_id, parent=None):
-        super().__init__(QgsDataItem.Collection, parent, label, path)
+        super().__init__(parent, label, path)
         self.mIcon = QIcon(":/plugins/maphub/icons/workspace.svg")
         self._workspace_id = workspace_id
         self._label = label
@@ -124,9 +126,9 @@ class MaphubWorkspaceItem(QgsDataItem):
             return []
 
 
-class MaphubFolderItem(QgsDataItem):
+class MaphubFolderItem(QgsDataCollectionItem):
     def __init__(self, label, path, folder_id, parent=None):
-        super().__init__(QgsDataItem.Directory, parent, label, path)
+        super().__init__(parent, label, path)
         self.mIcon = QIcon(":/plugins/maphub/icons/folder.svg")
         self._folder_id = folder_id
         self._label = label
@@ -200,10 +202,12 @@ class MaphubFolderItem(QgsDataItem):
             return []
 
 
-class MaphubMapItem(QgsDataItem):
+class MaphubMapItem(QgsLayerItem):
     def __init__(self, label, path, map_id, map_type, map_info=None, parent=None):
-        super().__init__(QgsDataItem.Layer, parent, label, path)
-        # Choose icon by type
+        layer_type = QgsLayerItem.Vector if map_type == "vector" else QgsLayerItem.Raster
+        uri = f"maphub:/map/{map_id}"
+        # Signature: (parent, name, path, providerKey, layerType, uri)
+        super().__init__(parent, label, path, "maphub", layer_type, uri)
         if map_type == "vector":
             self.mIcon = QIcon(":/plugins/maphub/icons/vector_map.svg")
         elif map_type == "raster":
@@ -215,9 +219,6 @@ class MaphubMapItem(QgsDataItem):
         self._map_type = map_type
         self._map_info = map_info or {}
         print(f"MapHub: MaphubMapItem created (label={label}, id={map_id})")
-
-    def hasChildren(self):
-        return False
 
     def icon(self):
         return self.mIcon
@@ -275,7 +276,6 @@ class MaphubMapItem(QgsDataItem):
             u = QgsMimeDataUtils.Uri()
             u.uri = f"maphub:/map/{self._map_id}"
             u.name = self._label
-            # Hint QGIS this is a layer-like item to allow direct drag
             u.providerKey = "maphub"
             u.layerType = self._map_type or "unknown"
             return [u]
