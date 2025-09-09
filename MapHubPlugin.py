@@ -3,9 +3,9 @@
 import os
 import os.path
 
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt, QEvent, QDataStream, QIODevice, QObject
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt, QEvent, QDataStream, QIODevice, QObject, QUrl
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QDockWidget, QTreeView
 from qgis.core import QgsProject
 
 from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
@@ -21,7 +21,433 @@ from .utils.scheduler_manager import SchedulerManager
 from .utils.error_manager import handled_exceptions
 from .utils.map_operations import download_map, download_folder_maps
 
+from qgis.core import (
+    QgsDataItem,
+    QgsDataItemProvider,
+    QgsDataItemProviderRegistry,
+    QgsApplication,
+    Qgis,
+    QgsMimeDataUtils
+)
+from qgis.gui import QgsGui, QgsCustomDropHandler
+from . import resources
 
+# Icon for Browser items (loaded from Qt resources)
+BROWSER_ICON = QIcon(":/plugins/maphub/icons/icon.png")
+
+class MaphubRootItem(QgsDataItem):
+    def __init__(self, parent=None):
+        # type Custom, label, path
+        super().__init__(QgsDataItem.Custom, parent, "MapHub", "maphub:")
+        self.mIcon = BROWSER_ICON
+        print("MapHub: MaphubRootItem created (label=MapHub, path=maphub:)")
+
+    def icon(self):
+        return BROWSER_ICON
+
+    def hasChildren(self):
+        return True
+
+    def createChildren(self):
+        print("MapHub: MaphubRootItem.createChildren() called - loading workspaces")
+        children = []
+        try:
+            from .utils.utils import get_maphub_client
+            client = get_maphub_client()
+
+            # Try to list all workspaces; if unavailable, fallback to personal workspace only
+            workspaces = []
+            try:
+                workspaces = client.workspace.get_workspaces()
+            except Exception:
+                pass
+
+            if workspaces:
+                for ws in workspaces:
+                    ws_id = ws.get("id") or ws.get("workspace", {}).get("id")
+                    ws_name = ws.get("name") or ws.get("workspace", {}).get("name") or "Workspace"
+                    if ws_id:
+                        children.append(MaphubWorkspaceItem(ws_name, f"maphub:/workspace/{ws_id}", ws_id, self))
+            else:
+                # Fallback to personal workspace only
+                try:
+                    ws = client.workspace.get_personal_workspace()
+                    ws_id = ws.get("id")
+                    ws_name = ws.get("name") or "Personal Workspace"
+                    if ws_id:
+                        children.append(MaphubWorkspaceItem(ws_name, f"maphub:/workspace/{ws_id}", ws_id, self))
+                except Exception as e:
+                    print(f"MapHub: Failed to load workspaces: {str(e)}")
+        except Exception as e:
+            print(f"MapHub: Error creating root children: {str(e)}")
+
+        return children
+
+
+class MaphubWorkspaceItem(QgsDataItem):
+    def __init__(self, label, path, workspace_id, parent=None):
+        super().__init__(QgsDataItem.Collection, parent, label, path)
+        self.mIcon = QIcon(":/plugins/maphub/icons/workspace.svg")
+        self._workspace_id = workspace_id
+        self._label = label
+        print(f"MapHub: MaphubWorkspaceItem created (label={label}, id={workspace_id})")
+
+    def hasChildren(self):
+        return True
+
+    def icon(self):
+        return self.mIcon
+
+    def createChildren(self):
+        print(f"MapHub: Loading root folder for workspace {self._workspace_id}")
+        children = []
+        try:
+            from .utils.utils import get_maphub_client
+            client = get_maphub_client()
+            root = client.folder.get_root_folder(self._workspace_id)
+            folder = root.get("folder", {})
+            folder_id = folder.get("id")
+            folder_name = folder.get("name") or "Root"
+            if folder_id:
+                children.append(MaphubFolderItem(folder_name, f"maphub:/folder/{folder_id}", folder_id, self))
+        except Exception as e:
+            print(f"MapHub: Error loading workspace root folder: {str(e)}")
+        return children
+
+    def mimeUris(self):
+        try:
+            u = QgsMimeDataUtils.Uri()
+            u.uri = f"maphub:/workspace/{self._workspace_id}"
+            u.name = self._label
+            return [u]
+        except Exception:
+            return []
+
+
+class MaphubFolderItem(QgsDataItem):
+    def __init__(self, label, path, folder_id, parent=None):
+        super().__init__(QgsDataItem.Directory, parent, label, path)
+        self.mIcon = QIcon(":/plugins/maphub/icons/folder.svg")
+        self._folder_id = folder_id
+        self._label = label
+        print(f"MapHub: MaphubFolderItem created (label={label}, id={folder_id})")
+
+    def hasChildren(self):
+        return True
+
+    def icon(self):
+        return self.mIcon
+
+    def createChildren(self):
+        print(f"MapHub: Loading folder contents for {self._folder_id}")
+        children = []
+        try:
+            from .utils.utils import get_maphub_client
+            client = get_maphub_client()
+            details = client.folder.get_folder(self._folder_id)
+            # Subfolders
+            for sub in details.get("child_folders", []):
+                sub_id = sub.get("id")
+                sub_name = sub.get("name") or "Folder"
+                if sub_id:
+                    children.append(MaphubFolderItem(sub_name, f"maphub:/folder/{sub_id}", sub_id, self))
+            # Maps
+            for map_info in details.get("map_infos", []):
+                map_id = map_info.get("id")
+                map_name = map_info.get("name") or "Map"
+                map_type = map_info.get("type") or "unknown"
+                if map_id:
+                    children.append(MaphubMapItem(map_name, f"maphub:/map/{map_id}", map_id, map_type, map_info, self))
+        except Exception as e:
+            print(f"MapHub: Error loading folder contents: {str(e)}")
+        return children
+
+    def actions(self, parent):
+        actions = []
+        try:
+            action_download_all = QAction(QIcon(":/plugins/maphub/icons/download.svg"), "Download all maps", parent)
+            action_download_all.triggered.connect(lambda: self._download_all(parent))
+            actions.append(action_download_all)
+
+            action_tiling_all = QAction(QIcon(":/plugins/maphub/icons/raster_map.svg"), "Add all as tiling services", parent)
+            action_tiling_all.triggered.connect(lambda: self._tiling_all(parent))
+            actions.append(action_tiling_all)
+        except Exception:
+            pass
+        return actions
+
+    def _download_all(self, parent=None):
+        try:
+            from .utils.map_operations import download_folder_maps
+            download_folder_maps(str(self._folder_id), parent)
+        except Exception as e:
+            print(f"MapHub: download all failed: {str(e)}")
+
+    def _tiling_all(self, parent=None):
+        try:
+            from .utils.map_operations import add_folder_maps_as_tiling_services
+            add_folder_maps_as_tiling_services(str(self._folder_id), parent)
+        except Exception as e:
+            print(f"MapHub: tiling all failed: {str(e)}")
+
+    def mimeUris(self):
+        try:
+            u = QgsMimeDataUtils.Uri()
+            u.uri = f"maphub:/folder/{self._folder_id}"
+            u.name = self._label
+            return [u]
+        except Exception:
+            return []
+
+
+class MaphubMapItem(QgsDataItem):
+    def __init__(self, label, path, map_id, map_type, map_info=None, parent=None):
+        super().__init__(QgsDataItem.Layer, parent, label, path)
+        # Choose icon by type
+        if map_type == "vector":
+            self.mIcon = QIcon(":/plugins/maphub/icons/vector_map.svg")
+        elif map_type == "raster":
+            self.mIcon = QIcon(":/plugins/maphub/icons/raster_map.svg")
+        else:
+            self.mIcon = BROWSER_ICON
+        self._label = label
+        self._map_id = map_id
+        self._map_type = map_type
+        self._map_info = map_info or {}
+        print(f"MapHub: MaphubMapItem created (label={label}, id={map_id})")
+
+    def hasChildren(self):
+        return False
+
+    def icon(self):
+        return self.mIcon
+
+    def actions(self, parent):
+        actions = []
+        try:
+            action_download = QAction(QIcon(":/plugins/maphub/icons/download.svg"), "Download", parent)
+            action_download.triggered.connect(lambda: self._download(parent))
+            actions.append(action_download)
+
+            action_tiling = QAction(QIcon(":/plugins/maphub/icons/style.svg"), "Add as tiling", parent)
+            action_tiling.triggered.connect(lambda: self._tiling(parent))
+            actions.append(action_tiling)
+        except Exception:
+            pass
+        return actions
+
+    def _build_map_data(self):
+        data = {
+            'id': str(self._map_id),
+            'name': self._label,
+            'type': self._map_type,
+        }
+        # If visuals already present, include them to style tiling layer
+        if 'visuals' in self._map_info:
+            data['visuals'] = self._map_info['visuals']
+        else:
+            # Try fetch visuals lazily
+            try:
+                from .utils.utils import get_maphub_client
+                info = get_maphub_client().maps.get_map(self._map_id)
+                if 'map' in info and 'visuals' in info['map']:
+                    data['visuals'] = info['map']['visuals']
+            except Exception:
+                pass
+        return data
+
+    def _download(self, parent=None):
+        try:
+            from .utils.map_operations import download_map
+            download_map(self._build_map_data(), parent)
+        except Exception as e:
+            print(f"MapHub: map download failed: {str(e)}")
+
+    def _tiling(self, parent=None):
+        try:
+            from .utils.map_operations import add_map_as_tiling_service
+            add_map_as_tiling_service(self._build_map_data(), parent)
+        except Exception as e:
+            print(f"MapHub: map tiling failed: {str(e)}")
+
+    def mimeUris(self):
+        try:
+            u = QgsMimeDataUtils.Uri()
+            u.uri = f"maphub:/map/{self._map_id}"
+            u.name = self._label
+            # Hint QGIS this is a layer-like item to allow direct drag
+            u.providerKey = "maphub"
+            u.layerType = self._map_type or "unknown"
+            return [u]
+        except Exception:
+            return []
+
+class MaphubProvider(QgsDataItemProvider):
+    def __init__(self):
+        super().__init__()
+        print("MapHub: MaphubProvider initialized")
+
+    def name(self):
+        return "maphub"
+
+    def capabilities(self):
+        # QGIS 3.40 expects a Capabilities flags object
+        try:
+            caps = QgsDataItemProvider.Capabilities()
+            print("MapHub: capabilities -> QgsDataItemProvider.Capabilities()")
+            return caps
+        except Exception:
+            try:
+                caps = Qgis.DataItemProviderCapabilities(
+                    Qgis.DataItemProviderCapability.Directories | Qgis.DataItemProviderCapability.Files
+                )
+                print("MapHub: capabilities -> Qgis.DataItemProviderCapabilities(Directories|Files)")
+                return caps
+            except Exception:
+                print("MapHub: capabilities -> Qgis.DataItemProviderCapabilities(0)")
+                return Qgis.DataItemProviderCapabilities(0)
+
+    # Top-level item(s) in the Browser
+    def createRootNodes(self):
+        print("MapHub: createRootNodes() called")
+        return [MaphubRootItem(None)]
+
+    # Required by abstract base in some QGIS versions
+    def createDataItem(self, path, parentItem):
+        try:
+            if not path:
+                print("MapHub: createDataItem(path is empty) -> MaphubRootItem(None)")
+                return MaphubRootItem(None)
+            if isinstance(path, str) and (path == "maphub:" or path == "maphub:/"):
+                print(f"MapHub: createDataItem(path={path}) -> MaphubRootItem(parent)")
+                return MaphubRootItem(parentItem)
+            if isinstance(path, str) and path.startswith("maphub:/workspace/"):
+                ws_id = path.split('/')[-1]
+                print(f"MapHub: createDataItem(path={path}) -> MaphubWorkspaceItem(id={ws_id})")
+                return MaphubWorkspaceItem(f"Workspace {ws_id}", path, ws_id, parentItem)
+            if isinstance(path, str) and path.startswith("maphub:/folder/"):
+                folder_id = path.split('/')[-1]
+                print(f"MapHub: createDataItem(path={path}) -> MaphubFolderItem(id={folder_id})")
+                return MaphubFolderItem(f"Folder {folder_id}", path, folder_id, parentItem)
+            if isinstance(path, str) and path.startswith("maphub:/map/"):
+                map_id = path.split('/')[-1]
+                print(f"MapHub: createDataItem(path={path}) -> MaphubMapItem(id={map_id})")
+                return MaphubMapItem(f"Map {map_id}", path, map_id, "unknown", None, parentItem)
+        except Exception:
+            pass
+        print(f"MapHub: createDataItem(path={path}) -> None")
+        return None
+
+
+class MapHubDropHandler(QgsCustomDropHandler):
+    def __init__(self, plugin):
+        super().__init__()
+        self._plugin = plugin
+
+    def canHandleMimeData(self, md):
+        try:
+            # Check custom dock mime
+            if md.hasFormat(MapBrowserTreeWidget.MIME_TYPE):
+                return True
+            # Check text
+            text = md.text() if hasattr(md, 'text') else ''
+            if text and ('maphub:/map/' in text or 'maphub:/folder/' in text or 'maphub:/' in text or text.strip() == 'maphub:'):
+                return True
+            # Check urls
+            if hasattr(md, 'hasUrls') and md.hasUrls():
+                for url in md.urls():
+                    s = url.toString()
+                    if s.startswith('maphub:/'):
+                        return True
+            # Check QGIS URIs
+            try:
+                uris = QgsMimeDataUtils.decodeUriList(md)
+                for u in uris:
+                    s = getattr(u, 'uri', None) or getattr(u, 'layerUri', None) or ''
+                    if isinstance(s, str) and s.startswith('maphub:/'):
+                        return True
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return False
+
+    def handleMimeDataV2(self, md):
+        try:
+            # Prefer custom dock format
+            if md.hasFormat(MapBrowserTreeWidget.MIME_TYPE):
+                self._plugin.processDrop(md)
+                return True
+            # Aggregate strings to process via existing helper
+            lines = []
+            text = md.text() if hasattr(md, 'text') else ''
+            if text:
+                lines.extend([p.strip() for p in text.splitlines() if p.strip()])
+            if hasattr(md, 'hasUrls') and md.hasUrls():
+                for url in md.urls():
+                    try:
+                        lines.append(url.toString())
+                    except Exception:
+                        pass
+            try:
+                uris = QgsMimeDataUtils.decodeUriList(md)
+                for u in uris:
+                    try:
+                        s = getattr(u, 'uri', None) or getattr(u, 'layerUri', None) or ''
+                        if isinstance(s, str):
+                            lines.append(s)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            if lines:
+                if self._plugin._process_maphub_uri_drop('\n'.join(lines)):
+                    return True
+        except Exception as e:
+            print(f"MapHub: Drop handler failed: {str(e)}")
+        return False
+
+    def customUriProviderKey(self):
+        try:
+            return "maphub"
+        except Exception:
+            return "maphub"
+
+    def handleCustomUriDrop(self, uri):
+        """
+        Handle drops for URIs whose providerKey == 'maphub'.
+        uri is a QgsMimeDataUtils.Uri with attributes: uri, name, providerKey, layerType, etc.
+        """
+        try:
+            s = getattr(uri, 'uri', None) or ''
+            if not isinstance(s, str):
+                return False
+            if s.startswith('maphub:/map/'):
+                map_id = s.split('/')[-1]
+                # Build map_data (fetch visuals)
+                map_data = {'id': map_id, 'name': getattr(uri, 'name', None) or f'Map {map_id}', 'type': getattr(uri, 'layerType', None) or 'unknown'}
+                try:
+                    from .utils.utils import get_maphub_client
+                    info = get_maphub_client().maps.get_map(map_id)
+                    if 'map' in info:
+                        m = info['map']
+                        map_data['name'] = m.get('name', map_data['name'])
+                        map_data['type'] = m.get('type', map_data['type'])
+                        if 'visuals' in m:
+                            map_data['visuals'] = m['visuals']
+                except Exception:
+                    pass
+                download_map(map_data, self._plugin.iface.mainWindow())
+                return True
+            if s.startswith('maphub:/folder/'):
+                folder_id = s.split('/')[-1]
+                download_folder_maps(folder_id, self._plugin.iface.mainWindow())
+                return True
+            # Root or unknown
+            return False
+        except Exception as e:
+            print(f"MapHub: handleCustomUriDrop failed: {str(e)}")
+            return False
 
 class MapHubPlugin(QObject):
     """QGIS Plugin Implementation."""
@@ -62,6 +488,9 @@ class MapHubPlugin(QObject):
         self.layer_menu_provider = None
         self.map_browser_dock = None
         self.status_update_scheduler = None
+        self.maphub_data_item_provider = None
+        self._registry_log_source = None
+        self._drop_handler = None
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -270,6 +699,29 @@ class MapHubPlugin(QObject):
         self.iface.layerTreeView().setAcceptDrops(True)
         self.iface.layerTreeView().installEventFilter(self)
 
+        # Register the MapHub browser provider
+        if self.maphub_data_item_provider is None:
+            self.maphub_data_item_provider = MaphubProvider()
+            try:
+                registry = self._get_provider_registry()
+                if registry:
+                    print("MapHub: Adding provider to registry")
+                    registry.addProvider(self.maphub_data_item_provider)
+                self._refresh_browser_ui()
+                print("MapHub: Provider registered and browser UI refresh requested")
+            except Exception as e:
+                print(f"MapHub: Failed to register browser provider: {str(e)}")
+
+        # Register a custom drop handler so drops from Browser work on canvas/layer tree
+        try:
+            if self._drop_handler is None:
+                self._drop_handler = MapHubDropHandler(self)
+                if hasattr(QgsGui.instance(), 'registerCustomDropHandler'):
+                    QgsGui.instance().registerCustomDropHandler(self._drop_handler)
+                    print("MapHub: Registered custom drop handler")
+        except Exception as e:
+            print(f"MapHub: Failed to register custom drop handler: {str(e)}")
+
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -305,6 +757,85 @@ class MapHubPlugin(QObject):
             self.iface.mapCanvas().removeEventFilter(self)
         if self.iface.layerTreeView():
             self.iface.layerTreeView().removeEventFilter(self)
+
+        # Unregister the MapHub browser provider
+        if self.maphub_data_item_provider:
+            try:
+                # removeProvider may not exist in some QGIS versions, so guard it
+                registry = self._get_provider_registry()
+                if registry and hasattr(registry, 'removeProvider'):
+                    print("MapHub: Removing provider from registry")
+                    registry.removeProvider(self.maphub_data_item_provider)
+                self._refresh_browser_ui()
+                print("MapHub: Provider unregistered and browser UI refresh requested")
+            except Exception as e:
+                print(f"MapHub: Failed to unregister browser provider: {str(e)}")
+            finally:
+                self.maphub_data_item_provider = None
+
+        # Unregister drop handler
+        try:
+            if self._drop_handler and hasattr(QgsGui.instance(), 'unregisterCustomDropHandler'):
+                QgsGui.instance().unregisterCustomDropHandler(self._drop_handler)
+                print("MapHub: Unregistered custom drop handler")
+        except Exception as e:
+            print(f"MapHub: Failed to unregister custom drop handler: {str(e)}")
+        finally:
+            self._drop_handler = None
+
+    def _get_provider_registry(self):
+        """Return the data item provider registry in a version-tolerant way."""
+        try:
+            if hasattr(QgsApplication, 'dataItemProviderRegistry'):
+                if self._registry_log_source != 'QgsApplication':
+                    print("MapHub: Using QgsApplication.dataItemProviderRegistry()")
+                    self._registry_log_source = 'QgsApplication'
+                return QgsApplication.dataItemProviderRegistry()
+        except Exception:
+            pass
+        try:
+            gui = QgsGui.instance() if hasattr(QgsGui, 'instance') else None
+            if gui and hasattr(gui, 'dataItemProviderRegistry'):
+                if self._registry_log_source != 'QgsGui':
+                    print("MapHub: Using QgsGui.instance().dataItemProviderRegistry()")
+                    self._registry_log_source = 'QgsGui'
+                return gui.dataItemProviderRegistry()
+        except Exception:
+            pass
+        try:
+            browser_model = QgsGui.instance().browserModel()
+            if browser_model and hasattr(browser_model, 'providerRegistry'):
+                if self._registry_log_source != 'BrowserModel':
+                    print("MapHub: Using browserModel.providerRegistry()")
+                    self._registry_log_source = 'BrowserModel'
+                return browser_model.providerRegistry()
+        except Exception:
+            pass
+        return None
+
+    def _refresh_browser_ui(self):
+        """Attempt to refresh the QGIS Browser UI in multiple ways."""
+        refreshed = False
+        try:
+            browser_model = QgsGui.instance().browserModel()
+            if browser_model:
+                browser_model.refresh()
+                refreshed = True
+                print("MapHub: Browser model refreshed via QgsGui.instance().browserModel()")
+        except Exception:
+            pass
+
+        if not refreshed:
+            try:
+                dock = self.iface.mainWindow().findChild(QDockWidget, "Browser")
+                if dock:
+                    tree = dock.findChild(QTreeView)
+                    if tree and tree.model() and hasattr(tree.model(), 'refresh'):
+                        tree.model().refresh()
+                        refreshed = True
+                        print("MapHub: Browser model refreshed via Browser dock tree")
+            except Exception:
+                pass
 
     def check_api_key(self):
         """Check if API key exists, prompt for it if not."""
@@ -460,15 +991,83 @@ class MapHubPlugin(QObject):
         This is used to handle drag and drop events from the MapBrowserDockWidget.
         """
         if event.type() == QEvent.DragEnter:
-            if event.mimeData().hasFormat(MapBrowserTreeWidget.MIME_TYPE):
+            md = event.mimeData()
+            if md.hasFormat(MapBrowserTreeWidget.MIME_TYPE):
                 event.acceptProposedAction()
                 return True
+            # Also accept native QGIS Browser drags that include maphub URIs
+            try:
+                # Check text
+                text = md.text() if hasattr(md, 'text') else ''
+                if text and ('maphub:/map/' in text or 'maphub:/folder/' in text or text.strip() == 'maphub:/' or text.strip() == 'maphub:'):
+                    event.acceptProposedAction()
+                    return True
+                # Check url list
+                if hasattr(md, 'hasUrls') and md.hasUrls():
+                    for url in md.urls():
+                        s = url.toString()
+                        if s.startswith('maphub:/'):
+                            event.acceptProposedAction()
+                            return True
+                # Check QGIS URI mime
+                try:
+                    uris = QgsMimeDataUtils.decodeUriList(md)
+                    for u in uris:
+                        try:
+                            s = getattr(u, 'uri', None) or getattr(u, 'layerUri', None) or ''
+                            if isinstance(s, str) and s.startswith('maphub:/'):
+                                event.acceptProposedAction()
+                                return True
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
         elif event.type() == QEvent.Drop:
-            if event.mimeData().hasFormat(MapBrowserTreeWidget.MIME_TYPE):
-                # Process the drop
-                self.processDrop(event.mimeData())
+            md = event.mimeData()
+            if md.hasFormat(MapBrowserTreeWidget.MIME_TYPE):
+                # Process the drop from custom dock widget
+                self.processDrop(md)
                 event.acceptProposedAction()
                 return True
+            # Handle native QGIS Browser drops containing maphub URIs
+            try:
+                # Handle text/uri-list
+                text = md.text() if hasattr(md, 'text') else ''
+                if text:
+                    if self._process_maphub_uri_drop(text):
+                        event.acceptProposedAction()
+                        return True
+                if hasattr(md, 'hasUrls') and md.hasUrls():
+                    # Build combined list
+                    lines = []
+                    for url in md.urls():
+                        try:
+                            lines.append(url.toString())
+                        except Exception:
+                            pass
+                    if lines and self._process_maphub_uri_drop('\n'.join(lines)):
+                        event.acceptProposedAction()
+                        return True
+                # Decode QGIS URIs
+                try:
+                    uris = QgsMimeDataUtils.decodeUriList(md)
+                    lines = []
+                    for u in uris:
+                        try:
+                            s = getattr(u, 'uri', None) or getattr(u, 'layerUri', None) or ''
+                            if isinstance(s, str):
+                                lines.append(s)
+                        except Exception:
+                            pass
+                    if lines and self._process_maphub_uri_drop('\n'.join(lines)):
+                        event.acceptProposedAction()
+                        return True
+                except Exception:
+                    pass
+            except Exception:
+                pass
         
         # Standard event processing
         return super(MapHubPlugin, self).eventFilter(obj, event)
@@ -518,3 +1117,48 @@ class MapHubPlugin(QObject):
         elif item_type == 'folder':
             # Call the download all function
             download_folder_maps(item_id, self.iface.mainWindow())
+
+    def _process_maphub_uri_drop(self, text_data: str) -> bool:
+        """
+        Process drops from native QGIS Browser which typically provide text/uri-list.
+        Expected formats:
+          - maphub:/map/<id>
+          - maphub:/folder/<id>
+          - maphub:/ or maphub:
+        Returns True if handled.
+        """
+        try:
+            # QGIS usually separates URIs by newline
+            parts = [p.strip() for p in text_data.splitlines() if p.strip()]
+            if not parts:
+                return False
+            handled_any = False
+            for p in parts:
+                if p.startswith('maphub:/map/'):
+                    map_id = p.split('/')[-1]
+                    # Build map_data (fetch visuals)
+                    map_data = {'id': map_id, 'name': f'Map {map_id}', 'type': 'unknown'}
+                    try:
+                        from .utils.utils import get_maphub_client
+                        info = get_maphub_client().maps.get_map(map_id)
+                        if 'map' in info:
+                            m = info['map']
+                            map_data['name'] = m.get('name', map_data['name'])
+                            map_data['type'] = m.get('type', map_data['type'])
+                            if 'visuals' in m:
+                                map_data['visuals'] = m['visuals']
+                    except Exception:
+                        pass
+                    download_map(map_data, self.iface.mainWindow())
+                    handled_any = True
+                elif p.startswith('maphub:/folder/'):
+                    folder_id = p.split('/')[-1]
+                    download_folder_maps(folder_id, self.iface.mainWindow())
+                    handled_any = True
+                elif p == 'maphub:/' or p == 'maphub:':
+                    # No-op for root
+                    handled_any = True
+            return handled_any
+        except Exception as e:
+            print(f"MapHub: Failed to process URI drop: {str(e)}")
+            return False

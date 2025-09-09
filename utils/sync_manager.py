@@ -124,24 +124,29 @@ class MapHubSyncManager:
         if 'qgis' in local_style_dict:
             # Use normalized XML for hash calculation to handle QGIS reordering elements
             local_style_hash = normalize_style_xml_and_hash(local_style_dict['qgis'])
+            last_synced_hash = layer.customProperty("maphub/last_style_hash")
             
             if 'visuals' in map_info and map_info['visuals'] and 'qgis' in map_info['visuals']:
                 # Use normalized XML for remote hash calculation as well
                 remote_style_hash = normalize_style_xml_and_hash(map_info['visuals']['qgis'])
                 
                 if local_style_hash != remote_style_hash:
-                    # Get the last synced style hash (stored during last sync)
-                    last_synced_hash = layer.customProperty("maphub/last_style_hash")
-                    
+                    # If no last synced hash, we can't determine the direction, prefer remote indication
                     if not last_synced_hash:
-                        # First sync or no stored hash, can't determine which side changed
                         return "style_changed_remote"
-                    elif local_style_hash != last_synced_hash and remote_style_hash != last_synced_hash:
+                    # Both changed
+                    if local_style_hash != last_synced_hash and remote_style_hash != last_synced_hash:
                         return "style_changed_both"
-                    elif local_style_hash != last_synced_hash:
+                    # Only local changed
+                    if local_style_hash != last_synced_hash:
                         return "style_changed_local"
-                    elif remote_style_hash != last_synced_hash:
+                    # Only remote changed
+                    if remote_style_hash != last_synced_hash:
                         return "style_changed_remote"
+            else:
+                # No remote visuals available – detect local-only changes against last synced hash
+                if last_synced_hash and local_style_hash != last_synced_hash:
+                    return "style_changed_local"
         
         return "in_sync"
     
@@ -621,12 +626,13 @@ class MapHubSyncManager:
             except Exception as e:
                 print(f"Error storing initial version ID: {e}")
         
-        # Store initial style hash for future comparison
+        # Store initial style hash for future comparison (normalized)
         try:
             # Get the current style hash
             style_dict = self.get_layer_style_as_dict(layer)
             if 'qgis' in style_dict:
-                style_hash = hashlib.md5(style_dict['qgis'].encode()).hexdigest()
+                # Use normalized XML to ensure stable hashing regardless of attribute order
+                style_hash = normalize_style_xml_and_hash(style_dict['qgis'])
                 layer.setCustomProperty("maphub/last_style_hash", style_hash)
         except Exception as e:
             print(f"Error storing initial style hash: {e}")

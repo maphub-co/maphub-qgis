@@ -61,3 +61,29 @@ class BaseEndpoint:
             raise APIException(response.status_code, error_message)
 
         return response
+
+    def _request_json(self, method: str, endpoint: str, **kwargs):
+        """
+        Make a request and return parsed JSON, ensuring the response is closed.
+        """
+        response = self._make_request(method, endpoint, **kwargs)
+        try:
+            return response.json()
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+    def _request_bytes(self, method: str, endpoint: str, **kwargs) -> bytes:
+        """
+        Make a request and return raw bytes, ensuring the response is closed.
+        """
+        response = self._make_request(method, endpoint, **kwargs)
+        try:
+            return response.content
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass

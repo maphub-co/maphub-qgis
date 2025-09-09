@@ -1,0 +1,11 @@
+#add all pycache folders
+__pycache__/
+
+#add all .venv folders
+.venv/
+
+#add all .idea folders
+.idea/
+
+#add all .junie folders
+.junie/

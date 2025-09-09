@@ -14,7 +14,7 @@ class WorkspaceEndpoint(BaseEndpoint):
         :return: A dictionary containing the workspace details.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", "/workspaces/personal").json()
+        return self._request_json("GET", "/workspaces/personal")
 
     def get_workspaces(self) -> List[Dict[str, Any]]:
         """
@@ -26,4 +26,4 @@ class WorkspaceEndpoint(BaseEndpoint):
             endpoint.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", "/workspaces").json()
+        return self._request_json("GET", "/workspaces")

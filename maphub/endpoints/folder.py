@@ -16,7 +16,7 @@ class FolderEndpoint(BaseEndpoint):
         :return: A dictionary containing the folder details.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", f"/folders/{folder_id}").json()
+        return self._request_json("GET", f"/folders/{folder_id}")
     
     def get_root_folder(self, workspace_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -29,7 +29,7 @@ class FolderEndpoint(BaseEndpoint):
         :return: A dictionary containing the root folder details.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", f"/folders?workspace_id={workspace_id}").json()
+        return self._request_json("GET", f"/folders?workspace_id={workspace_id}")
     
     def create_folder(self, folder_name: str, parent_folder_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -42,7 +42,7 @@ class FolderEndpoint(BaseEndpoint):
         :return: Response containing the created folder.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("POST", f"/folders?folder_name={folder_name}&parent_folder_id={parent_folder_id}").json()
+        return self._request_json("POST", f"/folders?folder_name={folder_name}&parent_folder_id={parent_folder_id}")
     
     def get_folder_maps(self, folder_id: uuid.UUID) -> List[Dict[str, Any]]:
         """
@@ -67,4 +67,4 @@ class FolderEndpoint(BaseEndpoint):
             specified workspace.
         :rtype: list[Dict[str, Any]]
         """
-        return self._make_request("GET", f"/folders/all?workspace_id={workspace_id}").json()
+        return self._request_json("GET", f"/folders/all?workspace_id={workspace_id}")

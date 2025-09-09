@@ -20,7 +20,7 @@ class VersionEndpoint(BaseEndpoint):
         :return: A dictionary containing the versions related to the specified map.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", f"/versions?map_id={map_id}").json()
+        return self._request_json("GET", f"/versions?map_id={map_id}")
 
     def upload_version(self, map_id: uuid.UUID, version_description: str, path: str) -> Dict[str, Any]:
         """
@@ -45,7 +45,7 @@ class VersionEndpoint(BaseEndpoint):
         }
 
         with open(path, "rb") as f:
-            return self._make_request("POST", f"/versions", params=params, files={"file": f}).json()
+            return self._request_json("POST", f"/versions", params=params, files={"file": f})
 
     def get_version(self, version_id: uuid.UUID) -> Dict[str, Any]:
         """
@@ -61,7 +61,7 @@ class VersionEndpoint(BaseEndpoint):
         :return: A dictionary containing the details of the requested version.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", f"/versions/{version_id}").json()
+        return self._request_json("GET", f"/versions/{version_id}")
 
     def download_version(self, version_id: uuid.UUID, path: str, file_format: str = None):
         """
@@ -131,6 +131,10 @@ class VersionEndpoint(BaseEndpoint):
             # For other formats, just write the content to the file
             with open(path, "wb") as f:
                 f.write(response.content)
+        try:
+            response.close()
+        except Exception:
+            pass
 
     def set_alias(self, version_id: uuid.UUID, alias: str) -> Dict[str, Any]:
         """
@@ -142,4 +146,4 @@ class VersionEndpoint(BaseEndpoint):
         :return: Dictionary containing the response from the alias update operation
         :rtype: Dict[str, Any]
         """
-        return self._make_request("PUT", f"/versions/{version_id}/alias?alias={alias}").json()
+        return self._request_json("PUT", f"/versions/{version_id}/alias?alias={alias}")

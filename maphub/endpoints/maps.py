@@ -22,7 +22,7 @@ class MapsEndpoint(BaseEndpoint):
         :return: The specified map.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", f"/maps/{map_id}").json()
+        return self._request_json("GET", f"/maps/{map_id}")
 
     def get_thumbnail(self, map_id: uuid.UUID) -> bytes:
         """
@@ -35,7 +35,7 @@ class MapsEndpoint(BaseEndpoint):
                  specified map.
         :rtype: bytes
         """
-        return self._make_request("GET", f"/maps/{map_id}/thumbnail").content
+        return self._request_bytes("GET", f"/maps/{map_id}/thumbnail")
 
     def get_tiler_url(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> str:
         """
@@ -55,7 +55,7 @@ class MapsEndpoint(BaseEndpoint):
         if alias is not None:
             params["alias"] = alias
 
-        return self._make_request("GET", f"/maps/{map_id}/tiler_url", params=params).json()
+        return self._request_json("GET", f"/maps/{map_id}/tiler_url", params=params)
 
     def get_layer_info(self, map_id: uuid.UUID, version_id: uuid.UUID = None, alias: str = None) -> Dict[str, Any]:
         """
@@ -75,7 +75,7 @@ class MapsEndpoint(BaseEndpoint):
         if alias is not None:
             params["alias"] = alias
 
-        return self._make_request("GET", f"/maps/{map_id}/layer_info", params=params).json()
+        return self._request_json("GET", f"/maps/{map_id}/layer_info", params=params)
 
     def upload_map(self, map_name: str, folder_id: uuid.UUID = None, public: bool = False,
                    path: str = None) -> Dict[str, Any]:
@@ -127,7 +127,7 @@ class MapsEndpoint(BaseEndpoint):
 
                 # Upload the zip file
                 with open(temp_zip_path, "rb") as f:
-                    return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
+                    return self._request_json("POST", f"/maps", params=params, files={"file": f})
             finally:
                 # Clean up the temporary zip file
                 if os.path.exists(temp_zip_path):
@@ -135,7 +135,7 @@ class MapsEndpoint(BaseEndpoint):
         else:
             # For non-shapefile uploads, use the original method
             with open(path, "rb") as f:
-                return self._make_request("POST", f"/maps", params=params, files={"file": f}).json()
+                return self._request_json("POST", f"/maps", params=params, files={"file": f})
 
     def download_map(self, map_id: uuid.UUID, path: str, file_format: str = None):
         """
@@ -203,6 +203,10 @@ class MapsEndpoint(BaseEndpoint):
             # For other formats, just write the content to the file
             with open(path, "wb") as f:
                 f.write(response.content)
+        try:
+            response.close()
+        except Exception:
+            pass
 
     def set_visuals(self, map_id: uuid.UUID, visuals: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -215,7 +219,7 @@ class MapsEndpoint(BaseEndpoint):
         :return: The response obtained from executing the request to the API as returned
                  by the `_make_request` method.
         """
-        return self._make_request("PUT", f"/maps/{map_id}/visuals", data=json.dumps(visuals)).json()
+        return self._request_json("PUT", f"/maps/{map_id}/visuals", data=json.dumps(visuals))
 
 
     ### Maps endpoints
@@ -248,7 +252,7 @@ class MapsEndpoint(BaseEndpoint):
         if page_size:
             params["page_size"] = page_size
 
-        return self._make_request("GET", "/maps/list", params=params).json()
+        return self._request_json("GET", "/maps/list", params=params)
 
     def search_maps(self, query: str = None, map_type: str = None, tags: List[str] = None, author_uid: str = None) -> \
             List[Dict[str, Any]]:
@@ -272,9 +276,9 @@ class MapsEndpoint(BaseEndpoint):
                  specified search criteria.
         :rtype: List[Dict[str, Any]]
         """
-        return self._make_request("POST", "/maps/search", data=json.dumps({
+        return self._request_json("POST", "/maps/search", data=json.dumps({
             "search_query": query,
             "map_type": map_type,
             "tags": tags,
             "author_uid": author_uid,
-        })).json()
+        }))
