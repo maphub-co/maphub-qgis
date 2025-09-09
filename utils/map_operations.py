@@ -16,74 +16,30 @@ from .sync_manager import MapHubSyncManager
 def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = None) -> Optional[str]:
     """
     Download a map to the default download location and add it to the QGIS project.
-
+    
     Args:
         map_data (Dict[str, Any]): The map data
         parent: The parent widget for dialogs
         selected_format (str, optional): The format to download the map in. If None, a default format will be selected based on the map type.
-
+    
     Returns:
         Optional[str]: The path to the downloaded file
     """
     print(f"Downloading map: {map_data.get('name')}")
 
-    # If format not specified, determine based on map type
-    if not selected_format:
-        if map_data.get('type') == 'raster':
-            selected_format = "tif"
-        elif map_data.get('type') == 'vector':
-            selected_format = "fgb"  # Default to GeoPackage for vector
-
-    # Determine file extension and filter based on selected format
-    file_extension = f".{selected_format}"
-
-    # Get default download location
-    default_dir = get_default_download_location()
+    # Use the centralized download function from MapHubSyncManager
+    from .sync_manager import MapHubSyncManager
+    sync_manager = MapHubSyncManager(iface)
     
-    # Create safe filename from map name
-    safe_name = ''.join(c for c in map_data.get('name', 'map') if c.isalnum() or c in ' _-')
-    safe_name = safe_name.replace(' ', '_')
+    layer = sync_manager.download_map(
+        map_id=map_data['id'],
+        file_format=selected_format,
+        layer_name=map_data.get('name'),
+        connect_layer=True  # Ensure the layer is connected
+    )
     
-    # Create full file path
-    file_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
-    
-    # Ensure filename is unique
-    counter = 1
-    base_name = os.path.splitext(file_path)[0]
-    while os.path.exists(file_path):
-        file_path = f"{base_name}_{counter}{file_extension}"
-        counter += 1
-
-    # Download the map with the selected format
-    get_maphub_client().maps.download_map(map_data['id'], file_path, selected_format)
-
-    # Adding downloaded file to layers
-    if not os.path.exists(file_path):
-        raise Exception(f"Downloaded file not found at {file_path}")
-
-    if map_data.get('type') == 'raster':
-        layer = iface.addRasterLayer(file_path, map_data.get('name', os.path.basename(file_path)))
-    elif map_data.get('type') == 'vector':
-        layer = iface.addVectorLayer(file_path, map_data.get('name', os.path.basename(file_path)), "ogr")
-    else:
-        raise Exception(f"Unknown layer type: {map_data['type']}")
-
-    if not layer.isValid():
-        raise Exception(f"The downloaded map could not be added as a layer. Please check the file: {file_path}")
-    else:
-        # Connect the layer to MapHub
-        from .sync_manager import MapHubSyncManager
-        sync_manager = MapHubSyncManager(iface)
-        sync_manager.connect_layer(
-            layer,
-            map_data['id'],
-            map_data.get('folder_id', ''),
-            file_path
-        )
-
-        sync_manager._pull_and_apply_style(layer, map_data['id'])
-
-    return file_path
+    # Return the path to the downloaded file
+    return layer.source() if layer else None
 
 
 def add_map_as_tiling_service(map_data: Dict[str, Any], parent=None) -> bool:
@@ -296,7 +252,7 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
                 if map_data.get('type') == 'raster':
                     selected_format = "tif"
                 elif map_data.get('type') == 'vector':
-                    selected_format = "gpkg"  # Default to GeoPackage for vector
+                    selected_format = "fgb"  # Default to FlatGeobuf for vector
 
             # Create file path
             map_id = map_data.get('id')
@@ -312,30 +268,20 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
                 except Exception as e:
                     print(f"Error fetching map visuals: {str(e)}")
 
+            # Use the centralized download function from MapHubSyncManager
+            sync_manager = MapHubSyncManager(iface)
+            
             # Download the map
-            client.maps.download_map(map_data['id'], file_path, selected_format)
+            layer = sync_manager.download_map(
+                map_id=map_data['id'],
+                file_format=selected_format,
+                layer_name=map_data.get('name'),
+                connect_layer=True  # Ensure the layer is connected
+            )
 
-            # Add to QGIS project
-            if os.path.exists(file_path):
-                if map_data.get('type') == 'raster':
-                    layer = iface.addRasterLayer(file_path, map_data.get('name', os.path.basename(file_path)))
-                elif map_data.get('type') == 'vector':
-                    layer = iface.addVectorLayer(file_path, map_data.get('name', os.path.basename(file_path)), "ogr")
-
-                if layer and layer.isValid():
-                    place_layer_at_position(project, layer, map_data.get('visuals', {}).get('layer_order'))
-                    if 'visuals' in map_data and map_data['visuals']:
-                        apply_style_to_layer(layer, map_data['visuals'])
-                    
-                    # Connect the layer to MapHub
-                    sync_manager = MapHubSyncManager(iface)
-                    sync_manager.connect_layer(
-                        layer,
-                        map_data.get('id'),
-                        folder_id,
-                        file_path
-                    )
-                    success_count += 1
+            if layer and layer.isValid():
+                place_layer_at_position(project, layer, map_data.get('visuals', {}).get('layer_order'))
+                success_count += 1
 
             # Update progress
             progress.setValue(i + 1)

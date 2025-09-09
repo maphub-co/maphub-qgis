@@ -299,7 +299,7 @@ class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
             if isinstance(layer, QgsVectorLayer):
                 file_extension = os.path.splitext(layer_path)[1]
                 if not file_extension:
-                    file_extension = '.gpkg'  # Default to GeoPackage
+                    file_extension = '.fgb'  # Default to FlatGeobuf
             elif isinstance(layer, QgsRasterLayer):
                 file_extension = os.path.splitext(layer_path)[1]
                 if not file_extension:
@@ -369,11 +369,11 @@ class UploadMapDialog(MapHubBaseDialog, FORM_CLASS):
                     if not file_extension:
                         # Determine default extension based on layer type
                         if isinstance(layer, QgsVectorLayer):
-                            file_extension = '.gpkg'  # Default to GeoPackage
+                            file_extension = '.fgb'  # Default to FlatGeobuf
                         elif isinstance(layer, QgsRasterLayer):
                             file_extension = '.tif'  # Default to GeoTIFF
                         else:
-                            file_extension = '.gpkg'  # Default fallback
+                            file_extension = '.fgb'  # Default fallback
                     
                     # Create full file path
                     source_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")

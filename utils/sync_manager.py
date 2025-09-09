@@ -238,11 +238,12 @@ class MapHubSyncManager:
         if not layer.customProperty("maphub/map_id"):
             self.show_error("Layer is not connected to MapHub")
             return
-        
-        status = self.get_layer_sync_status(layer)
+
         map_id = layer.customProperty("maphub/map_id")
         
         if direction == "auto":
+            status = self.get_layer_sync_status(layer)
+
             # Determine direction based on status
             if status == "local_modified":
                 direction = "push"
@@ -284,13 +285,67 @@ class MapHubSyncManager:
                     # Update style if needed
                     self._push_layer_style(layer, map_id)
                     
+                    # Get the new version ID
+                    new_version_id = None
+                    if 'task_id' in new_version:
+                        new_version_id = str(new_version.get('task_id'))
+                        layer.setCustomProperty("maphub/last_version_id", new_version_id)
+                    
+                    # Rename/move the file to reflect the new version
+                    if new_version_id:
+                        # Get default download location
+                        default_dir = get_default_download_location()
+                        
+                        # Determine file extension
+                        file_extension = os.path.splitext(local_path)[1]
+                        if not file_extension:
+                            # Determine default extension based on layer type
+                            if isinstance(layer, QgsVectorLayer):
+                                file_extension = '.fgb'  # Default to FlatGeobuf
+                            elif isinstance(layer, QgsRasterLayer):
+                                file_extension = '.tif'  # Default to GeoTIFF
+                            else:
+                                file_extension = '.fgb'  # Default fallback
+                        
+                        # Create new file path with map_id and version_id
+                        new_path = os.path.join(str(default_dir), f"{map_id}_{new_version_id}{file_extension}")
+                        
+                        # Store the old path for deletion later
+                        old_path = local_path
+                        
+                        # Copy the file to the new location
+                        if os.path.exists(local_path):
+                            # Create directory if it doesn't exist
+                            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                            
+                            # Copy the file
+                            with open(local_path, 'rb') as src_file:
+                                with open(new_path, 'wb') as dst_file:
+                                    dst_file.write(src_file.read())
+                            
+                            # Update the layer's source path
+                            layer.setCustomProperty("maphub/local_path", new_path)
+                            
+                            # For shapefiles, copy all related files and delete old ones
+                            if file_extension.lower() == '.shp':
+                                base_name = os.path.splitext(local_path)[0]
+                                new_base_name = os.path.splitext(new_path)[0]
+                                for ext in ['.dbf', '.shx', '.prj', '.qpj', '.cpg']:
+                                    related_file = f"{base_name}{ext}"
+                                    if os.path.exists(related_file):
+                                        # Copy the related file
+                                        with open(related_file, 'rb') as src_file:
+                                            with open(f"{new_base_name}{ext}", 'wb') as dst_file:
+                                                dst_file.write(src_file.read())
+                                        # Delete the old related file
+                                        os.remove(related_file)
+                            
+                            # Delete the old file after successful copy
+                            os.remove(old_path)
+                    
                     # Update metadata
                     layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                     
-                    # Update the stored version ID
-                    if 'task_id' in new_version:
-                        layer.setCustomProperty("maphub/last_version_id", str(new_version.get('task_id')))
-
                     self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer.name()}' successfully uploaded to MapHub.")
                 
             elif direction == "pull":
@@ -303,89 +358,19 @@ class MapHubSyncManager:
                         
                         self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully updated from MapHub.")
                 else:
-                    # Get the local path or use default download location if missing
-                    local_path = layer.customProperty("maphub/local_path")
-                    
-                    # Check if local path exists or needs to be updated
-                    if not local_path or not os.path.exists(local_path) or status == "file_missing":
-                        # Get default download location
-                        default_dir = get_default_download_location()
-                        
-                        # Create safe filename from layer name
-                        layer_name = layer.name()
-                        safe_name = ''.join(c for c in layer_name if c.isalnum() or c in ' _-')
-                        safe_name = safe_name.replace(' ', '_')
-                        
-                        # Determine file extension based on layer type
-                        if isinstance(layer, QgsVectorLayer):
-                            file_extension = '.gpkg'  # Default to GeoPackage for vector
-                        elif isinstance(layer, QgsRasterLayer):
-                            file_extension = '.tif'  # Default to GeoTIFF for raster
-                        else:
-                            file_extension = '.gpkg'  # Default fallback
-                        
-                        # If original path exists, try to use its extension
-                        if local_path and os.path.exists(os.path.dirname(local_path)):
-                            orig_ext = os.path.splitext(local_path)[1]
-                            if orig_ext:
-                                file_extension = orig_ext
-                        
-                        # Create full file path
-                        local_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
-                        
-                        # Ensure filename is unique
-                        counter = 1
-                        base_name = os.path.splitext(local_path)[0]
-                        while os.path.exists(local_path):
-                            local_path = f"{base_name}_{counter}{file_extension}"
-                            counter += 1
-                        
-                        # Update the layer property with the new path
-                        layer.setCustomProperty("maphub/local_path", local_path)
-                    
-                    # Download remote changes
-                    get_maphub_client().maps.download_map(map_id, local_path)
-                    
-                    # Reload layer from file
+                    # Create safe filename from layer name
                     layer_name = layer.name()
-                    layer_type = "raster" if isinstance(layer, QgsRasterLayer) else "vector"
-                    
-                    # Store all needed properties from the layer before removing it
-                    layer_properties = {key: layer.customProperty(key) for key in layer.customProperties().keys()}
 
-                    try:
-                        # Remove current layer
-                        QgsProject.instance().removeMapLayer(layer.id())
-                        
-                        # Add new layer
-                        if layer_type == "raster":
-                            new_layer = self.iface.addRasterLayer(local_path, layer_name)
-                        else:
-                            new_layer = self.iface.addVectorLayer(local_path, layer_name, "ogr")
-                            
-                        if not new_layer or not new_layer.isValid():
-                            raise Exception(f"Failed to create new layer from {local_path}")
-                    except Exception as e:
-                        self.show_error(f"Error reloading layer: {str(e)}", e)
-                        return
+                    # Download the map using our centralized function
+                    # Don't connect the layer yet as we'll handle that separately
+                    new_layer = self.download_map(
+                        map_id=map_id,
+                        layer_name=layer_name,
+                        connect_layer=True  # Don't connect automatically
+                    )
 
-                    # Get and apply remote style
-                    self._pull_and_apply_style(new_layer, map_id)
-
-                    # Update sync timestamp
-                    new_layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
-                    
-                    # Update the stored version ID
-                    # Get map info to retrieve the latest version ID
-                    map_info = get_maphub_client().maps.get_map(map_id)['map']
-                    if 'latest_version_id' in map_info:
-                        new_layer.setCustomProperty("maphub/last_version_id", str(map_info.get('latest_version_id')))
-
-                    # Transfer MapHub properties using the stored values
-                    for key, value in layer_properties.items():
-                        if key not in ["maphub/last_version_id", "maphub/last_sync", "maphub/last_style_hash"]:
-                            new_layer.setCustomProperty(key, value)
-
+                    # Remove current layer
+                    QgsProject.instance().removeMapLayer(layer.id())
 
                     self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer_name}' successfully updated from MapHub.")
                 
@@ -409,7 +394,7 @@ class MapHubSyncManager:
                 if is_file_based:
                     file_extension = os.path.splitext(layer_path)[1]
                     if not file_extension:
-                        file_extension = '.gpkg'  # Default to GeoPackage
+                        file_extension = '.fgb'  # Default to FlatGeobuf
                 else:
                     # For database layers (like PostGIS), use FlatGeobuf
                     file_extension = '.fgb'
@@ -513,7 +498,92 @@ class MapHubSyncManager:
                     local_path
                 )
 
-    def connect_layer(self, layer, map_id, folder_id, local_path):
+    def download_map(self, map_id, version_id=None, path=None, file_format=None, layer_name=None, connect_layer=True):
+        """
+        Downloads a map from MapHub with consistent file naming that includes version information.
+        Uses the default download location as a cache to avoid redownloading files.
+        
+        Args:
+            map_id: The ID of the map to download
+            version_id: Optional specific version to download
+            path: Optional specific path to save the file. If None, a path will be generated
+            file_format: Optional format to download the map in
+            layer_name: Optional name for the layer. If None, the map name will be used
+            connect_layer: Whether to connect the layer to MapHub after downloading
+            
+        Returns:
+            The QGIS layer object that was added to the project
+        """
+        # Get map information to retrieve name and version
+        map_info = get_maphub_client().maps.get_map(map_id)['map']
+
+        if version_id is None:
+            version_id = map_info.get('latest_version_id')
+        
+        # If no specific path is provided, generate one
+        if not path:
+            # Get default download location (which serves as our cache)
+            default_dir = get_default_download_location()
+            
+            # Use map_id and version_id as the primary identifier in the filename
+            safe_name = f"{map_id}_{version_id}"
+            
+            # Determine file extension based on format
+            if file_format:
+                file_extension = f".{file_format}"
+            elif map_info.get('type') == 'raster':
+                file_extension = '.tif'
+                file_format = 'tif'
+            else:  # Default to FlatGeobuf for vector
+                file_extension = '.fgb'
+                file_format = 'fgb'
+            
+            # Create full file path
+            path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
+
+        
+        # Check if the file already exists in the cache (default download location)
+        if os.path.exists(path):
+            print(f"Using cached file: {path}")
+        else:
+            # Download the map
+            get_maphub_client().versions.download_version(version_id, path, file_format)
+        
+        # Check if download was successful
+        if not os.path.exists(path):
+            raise Exception(f"Downloaded file not found at {path}")
+        
+        # Add the layer to QGIS
+        if not layer_name:
+            layer_name = map_info.get('name', 'map')
+            
+        # Add layer based on map type
+        if map_info.get('type') == 'raster':
+            layer = self.iface.addRasterLayer(path, layer_name)
+        else:
+            layer = self.iface.addVectorLayer(path, layer_name, "ogr")
+        
+        if not layer or not layer.isValid():
+            raise Exception(f"Failed to create layer from {path}")
+        
+        # Connect the layer to MapHub if requested
+        if connect_layer:
+            # Get folder_id from map_info if not already available
+            folder_id = map_info.get('folder_id', '')
+            
+            self.connect_layer(
+                layer,
+                map_id,
+                folder_id,
+                path
+            )
+            
+            # Apply the style from MapHub
+            self._pull_and_apply_style(layer, map_id)
+        
+        return layer
+
+    def connect_layer(self, layer, map_id, folder_id, local_path, version_id=None):
         """
         Connect a layer to a MapHub map.
         
@@ -524,8 +594,8 @@ class MapHubSyncManager:
             layer: The QGIS layer to connect
             map_id: The MapHub map ID
             folder_id: The MapHub folder ID
-            workspace_id: The MapHub workspace ID
             local_path: The local file path
+            version_id: Optional specific version to connect
             
         Returns:
             None
@@ -538,15 +608,18 @@ class MapHubSyncManager:
         layer.setCustomProperty("maphub/folder_id", str(folder_id))
         layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
         layer.setCustomProperty("maphub/local_path", local_path)
-        
-        # Store initial version ID for future comparison
-        try:
-            # Get the map info to retrieve the latest version ID
-            map_info = get_maphub_client().maps.get_map(map_id)['map']
-            if 'latest_version_id' in map_info:
-                layer.setCustomProperty("maphub/last_version_id", str(map_info.get('latest_version_id')))
-        except Exception as e:
-            print(f"Error storing initial version ID: {e}")
+
+        if version_id:
+            layer.setCustomProperty("maphub/last_version_id", str(version_id))
+        else:
+            # Store initial version ID for future comparison
+            try:
+                # Get the map info to retrieve the latest version ID
+                map_info = get_maphub_client().maps.get_map(map_id)['map']
+                if 'latest_version_id' in map_info:
+                    layer.setCustomProperty("maphub/last_version_id", str(map_info.get('latest_version_id')))
+            except Exception as e:
+                print(f"Error storing initial version ID: {e}")
         
         # Store initial style hash for future comparison
         try:
