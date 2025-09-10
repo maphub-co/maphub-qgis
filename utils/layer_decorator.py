@@ -58,8 +58,6 @@ class MapHubLayerDecorator:
         
         # Dictionary to track registered indicators
         self._indicators = {}
-        # Track layers we connected signals for
-        self._signal_layers = set()
 
     def update_layer_icons(self):
         """Update layer icons with MapHub status indicators"""
@@ -87,7 +85,6 @@ class MapHubLayerDecorator:
             layer = node.layer()
             if layer and self._is_maphub_layer(layer):
                 self._update_layer_indicator(layer, node, layer_tree_view)
-                self._ensure_layer_signal_connections(layer)
         else:
             for child in node.children():
                 self._process_tree_node(child, layer_tree_view)
@@ -168,49 +165,6 @@ class MapHubLayerDecorator:
         # Store the indicator for later removal
         self._indicators[indicator_id] = (node, indicator)
 
-    def _ensure_layer_signal_connections(self, layer):
-        """
-        Ensure we listen to relevant layer signals to auto-refresh indicators on changes.
-        """
-        try:
-            lid = layer.id()
-        except Exception:
-            return
-        if lid in self._signal_layers:
-            return
-        # Connect generic map layer signals
-        try:
-            if hasattr(layer, 'styleChanged'):
-                layer.styleChanged.connect(lambda: self._on_layer_event(layer))
-        except Exception:
-            pass
-        try:
-            if hasattr(layer, 'repaintRequested'):
-                layer.repaintRequested.connect(lambda: self._on_layer_event(layer))
-        except Exception:
-            pass
-        # Connect vector-layer specific signals (best-effort)
-        for sig in ['editingStarted', 'editingStopped', 'featureAdded', 'featuresDeleted', 'geometryChanged', 'attributeValueChanged']:
-            try:
-                if hasattr(layer, sig):
-                    getattr(layer, sig).connect(lambda *args, lyr=layer: self._on_layer_event(lyr))
-            except Exception:
-                pass
-        self._signal_layers.add(lid)
-
-    def _on_layer_event(self, layer):
-        """
-        Handle any layer change by recomputing its indicator.
-        """
-        try:
-            root = QgsProject.instance().layerTreeRoot()
-            node = root.findLayer(layer.id()) if hasattr(root, 'findLayer') else None
-            view = self.iface.layerTreeView()
-            if node and view:
-                self._update_layer_indicator(layer, node, view)
-        except Exception:
-            pass
-
     def _remove_indicator_for_layer(self, layer_id, layer_tree_view=None):
         """Remove existing indicator for a given layer id if present."""
         try:
@@ -250,8 +204,6 @@ class MapHubLayerDecorator:
 
         # Clear the indicators dictionary
         self._indicators.clear()
-        # Reset signal tracking; reconnect on next update
-        self._signal_layers.clear()
     
     def _get_status_icon(self, status):
         """

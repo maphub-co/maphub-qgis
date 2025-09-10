@@ -929,6 +929,12 @@ class MapHubPlugin(QObject):
         """Synchronize layers with MapHub."""
         from .ui.dialogs.SynchronizeLayersDialog import SynchronizeLayersDialog
         
+        # Refresh statuses immediately before opening the dialog
+        try:
+            self.refresh_status()
+        except Exception:
+            pass
+
         # Create and show the synchronization dialog
         dialog = SynchronizeLayersDialog(self.iface, self.iface.mainWindow())
         dialog.exec_()
