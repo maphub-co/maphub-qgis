@@ -1,6 +1,3 @@
-import sys
-import traceback
-import os
 import hashlib
 from pathlib import Path
 from typing import Dict, Any
@@ -8,28 +5,9 @@ from xml.etree import ElementTree as ET
 
 from qgis.core import QgsMapLayer
 from qgis.PyQt.QtCore import QSettings, QStandardPaths
-from qgis.PyQt.QtWidgets import QMessageBox
 from PyQt5.QtXml import QDomDocument
 
 from ..maphub import MapHubClient
-from ..ui.dialogs.ApiKeyDialog import ApiKeyDialog
-from ..maphub.exceptions import APIException
-from ..utils.error_manager import ErrorManager
-
-
-def show_error_dialog(message, title="Error"):
-    """Display a modal error dialog.
-
-    Args:
-        message (str): The error message
-        title (str): Dialog title
-    """
-    msg_box = QMessageBox()
-    msg_box.setIcon(QMessageBox.Critical)
-    msg_box.setText(message)
-    msg_box.setWindowTitle(title)
-    msg_box.setStandardButtons(QMessageBox.Ok)
-    msg_box.exec_()
 
 
 def get_maphub_client() -> MapHubClient:
@@ -40,21 +18,7 @@ def get_maphub_client() -> MapHubClient:
     base_url = settings.value("MapHubPlugin/base_url", None)
 
     if not api_key:
-        # No API key found, ask user to input it
-        dlg = ApiKeyDialog()
-        result = dlg.exec_()
-
-        if result:
-            # User provided an API key
-            api_key = dlg.get_api_key()
-        else:
-            # User canceled the dialog
-            return None
-
-    if api_key is None:
-        ErrorManager.show_error(
-            "API key is required. Please enter it in the plugin settings or click the 'Set API Key' button to set it."
-        )
+        raise Exception("Could not create MapHub client. API key is required.")
 
     params = {
         "api_key": api_key,

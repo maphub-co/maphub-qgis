@@ -2,8 +2,42 @@ import logging
 import sys
 import traceback
 from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtCore import QSettings
 
 from ..maphub.exceptions import APIException
+from ..ui.dialogs.ApiKeyDialog import ApiKeyDialog
+
+
+def ensure_api_key(func):
+    """Decorator to ensure API key is set before executing a function."""
+    def wrapper(self, *args, **kwargs):
+        # Check if API key exists
+        settings = QSettings()
+        api_key = settings.value("MapHubPlugin/api_key", "")
+        
+        if not api_key:
+            # No API key found, ask user to input it
+            dlg = ApiKeyDialog(self.iface.mainWindow() if hasattr(self, 'iface') else None)
+            result = dlg.exec_()
+            
+            if result:
+                # User provided an API key
+                api_key = dlg.get_api_key()
+            else:
+                # User canceled the dialog
+                return None
+        
+        # Execute the function if API key is set
+        if api_key:
+            return func(self, *args, **kwargs)
+        else:
+            # Show error message if API key is still not set
+            ErrorManager.show_error(
+                "API key is required. Please enter it in the plugin settings"
+            )
+            return None
+    
+    return wrapper
 
 
 def handled_exceptions(func):

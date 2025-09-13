@@ -18,7 +18,7 @@ from .ui.dialogs.PullProjectDialog import PullProjectDialog
 from .ui.dialogs.PushProjectDialog import PushProjectDialog
 from .ui.widgets.MapBrowserDockWidget import MapBrowserDockWidget, MapBrowserTreeWidget
 from .utils.scheduler_manager import SchedulerManager
-from .utils.error_manager import handled_exceptions
+from .utils.error_manager import handled_exceptions, ensure_api_key
 from .utils.map_operations import download_map, download_folder_maps
 
 
@@ -327,6 +327,7 @@ class MapHubPlugin(QObject):
         return api_key
 
     @handled_exceptions
+    @ensure_api_key
     def create_folder(self, checked=False):
         dlg = CreateFolderDialog(self.iface.mainWindow())
         dlg.exec_()
@@ -338,30 +339,35 @@ class MapHubPlugin(QObject):
         dlg.exec_()
 
     @handled_exceptions
+    @ensure_api_key
     def get_map(self, checked=False):
         """Show API key settings dialog to update the key."""
         dlg = GetMapDialog(self.iface, self.iface.mainWindow())
         result = dlg.exec_()
 
     @handled_exceptions
+    @ensure_api_key
     def upload_map(self, checked=False):
         """Show upload map dialog to upload a map."""
         dlg = UploadMapDialog(self.iface, self.iface.mainWindow())
         result = dlg.exec_()
 
     @handled_exceptions
+    @ensure_api_key
     def pull_project(self, checked=False):
         """Show pull project dialog to update the current project with latest data from MapHub."""
         dlg = PullProjectDialog(self.iface, self.iface.mainWindow())
         result = dlg.exec_()
 
     @handled_exceptions
+    @ensure_api_key
     def push_project(self, checked=False):
         """Show push project dialog to push the current project data to MapHub."""
         dlg = PushProjectDialog(self.iface, self.iface.mainWindow())
         result = dlg.exec_()
 
     @handled_exceptions
+    @ensure_api_key
     def show_map_browser(self, checked=False):
         """Show the map browser dock widget."""
         if self.map_browser_dock is None:
@@ -376,6 +382,7 @@ class MapHubPlugin(QObject):
             self.map_browser_dock.setVisible(True)
 
     @handled_exceptions
+    @ensure_api_key
     def clone_project(self, checked=False):
         """Show the clone project dialog to clone a directory from MapHub."""
         dlg = CloneFolderDialog(self.iface, self.iface.mainWindow())
@@ -394,6 +401,7 @@ class MapHubPlugin(QObject):
             self.layer_decorator.update_layer_icons()
     
     @handled_exceptions
+    @ensure_api_key
     def synchronize_layers(self, checked=False):
         """Synchronize layers with MapHub."""
         from .ui.dialogs.SynchronizeLayersDialog import SynchronizeLayersDialog
@@ -417,6 +425,7 @@ class MapHubPlugin(QObject):
             self.status_update_scheduler.start_periodic_updates(interval_ms)
     
     @handled_exceptions
+    @ensure_api_key
     def show_settings(self, checked=False):
         """Show the settings dialog."""
         # Create the settings dialog with callbacks
