@@ -1,7 +1,7 @@
 import os
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QDialog, QPushButton
-from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+from PyQt5.QtGui import QBrush, QColor, QFont
 from qgis.PyQt import uic
 from qgis.core import QgsProject
 
@@ -9,8 +9,11 @@ from .MapHubBaseDialog import MapHubBaseDialog
 from .UploadMapDialog import UploadMapDialog
 from .BatchConnectLayersDialog import BatchConnectLayersDialog
 from ...utils.sync_manager import MapHubSyncManager
-from ...utils.layer_decorator import MapHubLayerDecorator
 from ...utils.status_icon_manager import StatusIconManager
+from ...utils.project_utils import get_project_folder_id, save_project
+from ...utils.utils import get_maphub_client
+from .SaveProjectDialog import SaveProjectDialog
+from ..widgets.ProgressDialog import ProgressDialog
 
 # Load the UI file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -37,7 +40,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         self.setupUi(self)
         self.iface = iface
         self.icon_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
+
+        self.folder_id = self._collect_folder_id()
         
+        # Flag to determine if project should be saved on sync
+        self.save_project_on_sync = True
+
         # Initialize sync manager
         self.sync_manager = MapHubSyncManager(iface)
         
@@ -52,8 +60,96 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Hide the top batch connect button as we'll add it to the header
         self.batchConnectButton.hide()
         
+        # Add folder name label at the top of the dialog
+        self._add_folder_name_label()
+        
         # Populate the tree with all layers
         self.populate_layers()
+
+    def _collect_folder_id(self) -> str:
+        # Get folder_id from project
+        folder_id = get_project_folder_id()
+
+        if folder_id:
+            return folder_id
+
+        # Show the folder selection dialog
+        save_dialog = SaveProjectDialog(self)
+        result = save_dialog.exec_()
+
+        if result:
+            folder_id = save_dialog.get_selected_folder_id()
+            # Save the folder_id to the project
+            QgsProject.instance().writeEntry("maphub", "folder_id", folder_id)
+            return folder_id
+
+        else:
+            raise Exception("You need to select a folder to synchronize layers with MapHub.")
+            
+    def _on_save_project_checkbox_changed(self, state):
+        """
+        Handle changes to the save project checkbox state.
+        
+        Args:
+            state: The new state of the checkbox
+        """
+        self.save_project_on_sync = state == Qt.Checked
+    
+    def _add_folder_name_label(self):
+        """
+        Add a label at the top of the dialog showing the folder name and a checkbox
+        to specify whether the project should be saved when synchronizing.
+        """
+        try:
+            # Get the folder information using the MapHub client
+            client = get_maphub_client()
+            folder_info = client.folder.get_folder(self.folder_id)
+            folder_name = folder_info['folder'].get('name', 'Unknown Folder')
+            
+            # Create a horizontal layout for the folder name and checkbox
+            folder_layout = QHBoxLayout()
+            
+            # Create a label with the folder name
+            folder_label = QLabel(f"Folder: {folder_name}")
+            
+            # Style the label to make it stand out
+            font = QFont()
+            font.setBold(True)
+            folder_label.setFont(font)
+            
+            # Add the label to the horizontal layout
+            folder_layout.addWidget(folder_label)
+            
+            # Add a spacer to push the checkbox to the right
+            folder_layout.addStretch()
+            
+            # Create a checkbox for saving the project
+            save_project_checkbox = QCheckBox("Save project on synchronize")
+            save_project_checkbox.setChecked(self.save_project_on_sync)
+            save_project_checkbox.stateChanged.connect(self._on_save_project_checkbox_changed)
+            folder_layout.addWidget(save_project_checkbox)
+            
+            # Insert the horizontal layout at the top of the dialog
+            self.verticalLayout.insertLayout(0, folder_layout)
+            
+        except Exception as e:
+            # If there's an error getting the folder name, just show "Unknown Folder"
+            folder_layout = QHBoxLayout()
+            folder_label = QLabel("Folder: Unknown")
+            folder_layout.addWidget(folder_label)
+            
+            # Add a spacer to push the checkbox to the right
+            folder_layout.addStretch()
+            
+            # Create a checkbox for saving the project
+            save_project_checkbox = QCheckBox("Save project on synchronize")
+            save_project_checkbox.setChecked(self.save_project_on_sync)
+            save_project_checkbox.stateChanged.connect(self._on_save_project_checkbox_changed)
+            folder_layout.addWidget(save_project_checkbox)
+            
+            # Insert the horizontal layout at the top of the dialog
+            self.verticalLayout.insertLayout(0, folder_layout)
+
     
     def on_select_all_clicked(self):
         """Handle click on the Select All button."""
@@ -145,7 +241,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 "expanded": True
             },
             {
-                "title": "LAYERS NOT CONNECTED",
+                "title": "LAYERS TO CONNECT (Will be uploaded to MapHub)",
                 "layers": not_connected_layers,
                 "color": QColor(255, 255, 224),  # Light yellow
                 "expanded": True
@@ -189,15 +285,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             group_item.setExpanded(group["expanded"])
             
             # Add child items
-            if group["title"] == "LAYERS NOT CONNECTED":
-                # Add Connect Layers button to the header (smaller size)
-                connect_button = QPushButton("Connect")
-                connect_button.setMaximumWidth(80)
-                connect_button.setMaximumHeight(20)
-                connect_button.setStyleSheet("QPushButton { padding: 2px; }")
-                connect_button.clicked.connect(self.on_batch_connect_clicked)
-                self.layersTree.setItemWidget(group_item, 2, connect_button)
-                
+            if group["title"] == "LAYERS TO CONNECT (Will be uploaded to MapHub)":
                 # Handle not connected layers
                 for layer in group["layers"]:
                     self._add_not_connected_layer(group_item, layer)
@@ -260,17 +348,19 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         item = QTreeWidgetItem(parent_item)
         item.setText(0, layer.name())
         
-        # Gray out the text
+        # Gray out the text but not as much as before
         for col in range(3):
-            item.setForeground(col, QBrush(QColor(128, 128, 128)))
+            item.setForeground(col, QBrush(QColor(80, 80, 80)))  # Darker than before to be more readable
         
-        # Add "Not Connected" text in the action column
-        item.setText(1, "Not Connected")
+        # Add "Will Connect" text in the action column
+        item.setText(1, "Will Connect")
         
-        # Add disabled checkbox
+        # Add enabled checkbox
         checkbox = QCheckBox()
-        checkbox.setEnabled(False)
+        checkbox.setEnabled(True)  # Enable the checkbox
+        checkbox.setChecked(False)  # Unchecked by default
         self.layersTree.setItemWidget(item, 2, checkbox)
+        
         # Force update to make checkbox visible
         item.setSelected(False)
         
@@ -372,54 +462,101 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         """Handle click on the Synchronize Selected button."""
         # Get selected layers with their synchronization directions
         selected_items = []
+        selected_not_connected = []
         
         for i in range(self.layersTree.topLevelItemCount()):
             group_item = self.layersTree.topLevelItem(i)
+            group_title = group_item.text(0)
+            
             for j in range(group_item.childCount()):
                 child_item = group_item.child(j)
                 checkbox = self.layersTree.itemWidget(child_item, 2)
                 if checkbox and checkbox.isChecked():
                     layer = child_item.data(0, Qt.UserRole)
                     
-                    # Get synchronization direction
-                    direction = "auto"
-                    
-                    # Check if this is a style conflict
-                    widget = self.layersTree.itemWidget(child_item, 1)
-                    if isinstance(widget, QComboBox):
-                        # This is a style conflict, get the selected option
-                        if widget.currentText() == "Keep Local Style":
-                            direction = "push"
-                        else:  # "Use Remote Style"
-                            direction = "pull"
-                        # Set style_only flag to True for style conflicts
-                        selected_items.append((layer, direction, True))
+                    # Check if this is a not-connected layer
+                    if "TO CONNECT" in group_title:
+                        selected_not_connected.append(layer)
                     else:
-                        # Get the layer's status to check if it's a style-related status
-                        status = self.sync_manager.get_layer_sync_status(layer)
-                        style_only = status in ["style_changed_local", "style_changed_remote", "style_changed_both"]
-                        selected_items.append((layer, direction, style_only))
+                        # Get synchronization direction
+                        direction = "auto"
+                        
+                        # Check if this is a style conflict
+                        widget = self.layersTree.itemWidget(child_item, 1)
+                        if isinstance(widget, QComboBox):
+                            # This is a style conflict, get the selected option
+                            if widget.currentText() == "Keep Local Style":
+                                direction = "push"
+                            else:  # "Use Remote Style"
+                                direction = "pull"
+                            # Set style_only flag to True for style conflicts
+                            selected_items.append((layer, direction, True))
+                        else:
+                            # Get the layer's status to check if it's a style-related status
+                            status = self.sync_manager.get_layer_sync_status(layer)
+                            style_only = status in ["style_changed_local", "style_changed_remote", "style_changed_both"]
+                            selected_items.append((layer, direction, style_only))
         
-        # If no layers selected, show a message
-        if not selected_items:
-            QMessageBox.information(
-                self,
-                "No Layers Selected",
-                "Please select at least one layer to synchronize."
-            )
-            return
+        # If no layers selected
+        if not selected_items and not selected_not_connected:
+            # If save_project_on_sync is true, save the project even if no layers are selected
+            if self.save_project_on_sync:
+                save_project(folder_id=self.folder_id)
+                QMessageBox.information(
+                    self,
+                    "Project Saved",
+                    "No layers were selected for synchronization, but the project was saved."
+                )
+                self.accept()
+                return
+            else:
+                # Otherwise show the standard message
+                QMessageBox.information(
+                    self,
+                    "No Layers Selected",
+                    "Please select at least one layer to synchronize."
+                )
+                return
         
         # Create and show progress dialog
-        from ..widgets.ProgressDialog import ProgressDialog
         progress = ProgressDialog("Synchronizing Layers", "Preparing to synchronize...", self)
-        progress.set_progress(0, len(selected_items))
+        total_operations = len(selected_items) + len(selected_not_connected)
+        progress.set_progress(0, total_operations)
         progress.show()
         
-        # Synchronize selected layers
+        # First, connect not-connected layers
         success_count = 0
+        connect_count = 0
+        
+        if selected_not_connected:
+            progress.set_message("Connecting layers to MapHub...")
+            
+            for i, layer in enumerate(selected_not_connected):
+                progress.set_message(f"Connecting layer '{layer.name()}'...")
+                progress.set_progress(i)
+                
+                try:
+                    # Upload the layer as a new map
+                    self.sync_manager.add_layer(
+                        layer=layer,
+                        map_name=layer.name(),
+                        folder_id=self.folder_id,
+                        public=False
+                    )
+                    connect_count += 1
+                except Exception as e:
+                    from ...utils.error_manager import ErrorManager
+                    ErrorManager.show_error(f"Failed to connect layer '{layer.name()}'", e, self)
+                
+                # Check if user canceled
+                if progress.result() == QDialog.Rejected:
+                    break
+        
+        # Then, synchronize connected layers
+        start_index = len(selected_not_connected)
         for i, (layer, direction, style_only) in enumerate(selected_items):
             progress.set_message(f"Synchronizing layer '{layer.name()}'...")
-            progress.set_progress(i)
+            progress.set_progress(start_index + i)
             
             try:
                 self.sync_manager.synchronize_layer(layer, direction, style_only)
@@ -447,10 +584,22 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             layer_decorator.update_layer_icons()
         
         # Show success message
+        if connect_count > 0 and success_count > 0:
+            message = f"Successfully connected {connect_count} layer(s) and synchronized {success_count} layer(s)."
+        elif connect_count > 0:
+            message = f"Successfully connected {connect_count} layer(s) to MapHub."
+        else:
+            message = f"Successfully synchronized {success_count} of {len(selected_items)} layer(s)."
+
+
+        # Save the project if the checkbox is checked
+        if self.save_project_on_sync:
+            save_project(folder_id=self.folder_id)
+
         QMessageBox.information(
             self,
-            "Synchronization Complete",
-            f"Successfully synchronized {success_count} of {len(selected_items)} layer(s)."
+            "Operation Complete",
+            message
         )
         
         # Close dialog

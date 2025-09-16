@@ -6,7 +6,7 @@ from .base import BaseEndpoint
 
 class FolderEndpoint(BaseEndpoint):
     """Endpoints for folder operations."""
-    
+
     def get_folder(self, folder_id: uuid.UUID) -> Dict[str, Any]:
         """
         Fetches the details of a specific folder based on the provided folder ID.
@@ -17,7 +17,7 @@ class FolderEndpoint(BaseEndpoint):
         :rtype: Dict[str, Any]
         """
         return self._make_request("GET", f"/folders/{folder_id}").json()
-    
+
     def get_root_folder(self, workspace_id: uuid.UUID) -> Dict[str, Any]:
         """
         Fetches the root folder for the authenticated user.
@@ -30,7 +30,7 @@ class FolderEndpoint(BaseEndpoint):
         :rtype: Dict[str, Any]
         """
         return self._make_request("GET", f"/folders?workspace_id={workspace_id}").json()
-    
+
     def create_folder(self, folder_name: str, parent_folder_id: uuid.UUID) -> Dict[str, Any]:
         """
         Creates a new folder with the given folder name.
@@ -42,8 +42,9 @@ class FolderEndpoint(BaseEndpoint):
         :return: Response containing the created folder.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("POST", f"/folders?folder_name={folder_name}&parent_folder_id={parent_folder_id}").json()
-    
+        return self._make_request("POST",
+                                  f"/folders?folder_name={folder_name}&parent_folder_id={parent_folder_id}").json()
+
     def get_folder_maps(self, folder_id: uuid.UUID) -> List[Dict[str, Any]]:
         """
         Fetches a list of maps associated with a specific folder.
@@ -68,3 +69,13 @@ class FolderEndpoint(BaseEndpoint):
         :rtype: list[Dict[str, Any]]
         """
         return self._make_request("GET", f"/folders/all?workspace_id={workspace_id}").json()
+
+    def get_qgis_project(self, folder_id: uuid.UUID, local_path: str) -> None:
+        response = self._make_request("GET", f"/folders/{folder_id}/project.qgz")
+
+        with open(local_path, "wb") as f:
+            f.write(response.content)
+
+    def put_qgis_project(self, folder_id: uuid.UUID, local_path: str) -> None:
+        with open(local_path, "rb") as f:
+            self._make_request("PUT", f"/folders/{folder_id}/project.qgz", files={"file": f})

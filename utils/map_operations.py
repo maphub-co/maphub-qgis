@@ -11,6 +11,7 @@ from qgis.utils import iface
 # from .. import utils
 from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position, get_default_download_location
 from .sync_manager import MapHubSyncManager
+from .project_utils import load_maphub_project
 
 
 def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = None) -> Optional[str]:
@@ -35,7 +36,7 @@ def download_map(map_data: Dict[str, Any], parent=None, selected_format: str = N
         map_id=map_data['id'],
         file_format=selected_format,
         layer_name=map_data.get('name'),
-        connect_layer=True  # Ensure the layer is connected
+        connect_layer=False  # Ensure the layer is connected
     )
     
     # Return the path to the downloaded file
@@ -276,7 +277,7 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
                 map_id=map_data['id'],
                 file_format=selected_format,
                 layer_name=map_data.get('name'),
-                connect_layer=True  # Ensure the layer is connected
+                connect_layer=False  # Ensure the layer is connected
             )
 
             if layer and layer.isValid():
@@ -305,3 +306,88 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
         )
 
     return success_count, len(maps)
+
+
+def load_and_sync_folder(folder_id: str, iface, parent=None) -> None:
+    """
+    Load a QGIS project from MapHub and synchronize all connected layers.
+    
+    This function first loads the QGIS project associated with the folder,
+    then synchronizes all layers that are connected to MapHub.
+    
+    Args:
+        folder_id (str): The ID of the folder containing the project
+        parent: The parent widget for dialogs
+    """
+    # Load the QGIS project from MapHub
+    try:
+        load_maphub_project(folder_id)
+    except Exception as e:
+        iface.messageBar().pushSuccess("MapHub", f"Folder has no associated project. Downloading maps of folder instead.")
+
+        download_folder_maps(folder_id)
+        return
+    
+    # Create a progress dialog
+    progress_dialog = QDialog(parent)
+    progress_dialog.setWindowTitle("Synchronizing Layers")
+    progress_dialog.setMinimumWidth(300)
+    
+    layout = QVBoxLayout(progress_dialog)
+    layout.addWidget(QLabel("Synchronizing connected layers..."))
+    
+    # Get all connected layers
+    sync_manager = MapHubSyncManager(iface)
+    connected_layers = sync_manager.get_connected_layers()
+    
+    if not connected_layers:
+        progress_dialog.close()
+        QMessageBox.information(
+            parent,
+            "Synchronization Complete",
+            "Project loaded successfully. No connected layers found to synchronize."
+        )
+        return
+    
+    # Set up progress bar
+    progress = QProgressBar()
+    progress.setMinimum(0)
+    progress.setMaximum(len(connected_layers))
+    progress.setValue(0)
+    layout.addWidget(progress)
+    
+    progress_dialog.show()
+    
+    # Synchronize each connected layer
+    success_count = 0
+    errors = []
+    
+    for i, layer in enumerate(connected_layers):
+        try:
+            # Synchronize the layer (auto direction will determine the appropriate action)
+            sync_manager.synchronize_layer(layer, direction="auto")
+            success_count += 1
+        except Exception as e:
+            errors.append(f"Error synchronizing layer {layer.name()}: {str(e)}")
+        
+        # Update progress
+        progress.setValue(i + 1)
+        QApplication.processEvents()
+    
+    # Close progress dialog
+    progress_dialog.close()
+    
+    # Show results
+    if errors:
+        error_message = f"Project loaded successfully, but errors occurred while synchronizing layers:\n" + "\n".join(errors)
+        QMessageBox.warning(
+            parent,
+            "Synchronization Errors",
+            error_message
+        )
+    else:
+        QMessageBox.information(
+            parent,
+            "Synchronization Complete",
+            f"Project loaded successfully. {success_count} layers synchronized."
+        )

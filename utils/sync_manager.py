@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Optional
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
 from ..maphub.exceptions import APIException
-from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location, normalize_style_xml_and_hash
+from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location, normalize_style_xml_and_hash, layer_position, place_layer_at_position
 
 
 class MapHubSyncManager:
@@ -174,6 +174,11 @@ class MapHubSyncManager:
         style_dict = self.get_layer_style_as_dict(layer)
         if not style_dict:
             return False
+        
+        # Get the current layer position and add it to the style
+        project = QgsProject.instance()
+        position = layer_position(project, layer)
+        style_dict['layer_order'] = position
             
         get_maphub_client().maps.set_visuals(map_id, style_dict)
         
@@ -272,18 +277,43 @@ class MapHubSyncManager:
                 # Check if only style has changed
                 if style_only:
                     # Only upload the style, not the entire file
-                    if self._push_layer_style(layer, map_id):
-                        # Update metadata
-                        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
-                        
-                        self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
+                    # Get the current layer position and add it to the style
+                    project = QgsProject.instance()
+                    position = layer_position(project, layer)
+                    
+                    # Update style with layer position
+                    style_json = self.get_layer_style_as_dict(layer)
+                    style_json['layer_order'] = position
+                    
+                    # Upload the style with layer position
+                    get_maphub_client().maps.set_visuals(map_id, style_json)
+                    
+                    # Store the current style hash for future comparison
+                    if 'qgis' in style_json:
+                        style_hash = normalize_style_xml_and_hash(style_json['qgis'])
+                        layer.setCustomProperty("maphub/last_style_hash", style_hash)
+                    
+                    # Update metadata
+                    layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                    
+                    self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
                 else:
                     # Upload local changes to MapHub (full file upload)
                     local_path = layer.customProperty("maphub/local_path")
+                    
+                    # Get the current layer position and add it to the style
+                    project = QgsProject.instance()
+                    position = layer_position(project, layer)
+                    
+                    # Update style with layer position
+                    style_json = self.get_layer_style_as_dict(layer)
+                    style_json['layer_order'] = position
+                    
+                    # Upload the file
                     new_version = get_maphub_client().versions.upload_version(map_id, "QGIS upload", local_path)
                     
-                    # Update style if needed
-                    self._push_layer_style(layer, map_id)
+                    # Update the map visuals with the style including layer position
+                    get_maphub_client().maps.set_visuals(map_id, style_json)
                     
                     # Get the new version ID
                     new_version_id = None
@@ -360,18 +390,25 @@ class MapHubSyncManager:
                 else:
                     # Create safe filename from layer name
                     layer_name = layer.name()
-
+                    
+                    # Get map info to retrieve layer_order
+                    map_info = get_maphub_client().maps.get_map(map_id)['map']
+                    layer_order = map_info.get('visuals', {}).get('layer_order')
+                    
                     # Download the map using our centralized function
-                    # Don't connect the layer yet as we'll handle that separately
                     new_layer = self.download_map(
                         map_id=map_id,
                         layer_name=layer_name,
-                        connect_layer=True  # Don't connect automatically
+                        connect_layer=True
                     )
-
+                    
+                    # Place the layer at the correct position if layer_order exists
+                    if layer_order and new_layer:
+                        place_layer_at_position(QgsProject.instance(), new_layer, layer_order)
+                    
                     # Remove current layer
                     QgsProject.instance().removeMapLayer(layer.id())
-
+                    
                     self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer_name}' successfully updated from MapHub.")
                 
         except Exception as e:
@@ -445,6 +482,11 @@ class MapHubSyncManager:
 
             # Get the layer style
             style_json = get_layer_styles_as_json(layer, {})
+            
+            # Get the current layer position and add it to the style
+            project = QgsProject.instance()
+            position = layer_position(project, layer)
+            style_json['layer_order'] = position
 
             # Upload the map to MapHub
             client = get_maphub_client()
@@ -458,7 +500,7 @@ class MapHubSyncManager:
             # Get the map ID from the result
             map_id = result.get('map_id')
 
-            # Update the layer visuals with the uploaded map style
+            # Update the layer visuals with the uploaded map style including layer position
             client.maps.set_visuals(map_id, style_json)
 
             # Connect the layer to the uploaded map
@@ -580,6 +622,11 @@ class MapHubSyncManager:
             
             # Apply the style from MapHub
             self._pull_and_apply_style(layer, map_id)
+            
+            # Place the layer at the correct position if layer_order exists
+            layer_order = map_info.get('visuals', {}).get('layer_order')
+            if layer_order:
+                place_layer_at_position(QgsProject.instance(), layer, layer_order)
         
         return layer
 
@@ -685,14 +732,39 @@ class MapHubSyncManager:
         if response == QMessageBox.Save:
             # Upload local style to MapHub (style only)
             map_id = layer.customProperty("maphub/map_id")
-            if self._push_layer_style(layer, map_id):
-                # Update metadata
-                layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
-                self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
+            
+            # Get the current layer position and add it to the style
+            project = QgsProject.instance()
+            position = layer_position(project, layer)
+            
+            # Update style with layer position
+            style_json = self.get_layer_style_as_dict(layer)
+            style_json['layer_order'] = position
+            
+            # Upload the style with layer position
+            get_maphub_client().maps.set_visuals(map_id, style_json)
+            
+            # Store the current style hash for future comparison
+            if 'qgis' in style_json:
+                style_hash = normalize_style_xml_and_hash(style_json['qgis'])
+                layer.setCustomProperty("maphub/last_style_hash", style_hash)
+            
+            # Update metadata
+            layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+            self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
         elif response == QMessageBox.Open:
             # Download remote style from MapHub (style only)
             map_id = layer.customProperty("maphub/map_id")
+            
+            # Get map info to retrieve layer_order
+            map_info = get_maphub_client().maps.get_map(map_id)['map']
+            layer_order = map_info.get('visuals', {}).get('layer_order')
+            
             if self._pull_and_apply_style(layer, map_id):
+                # Place the layer at the correct position if layer_order exists
+                if layer_order:
+                    place_layer_at_position(QgsProject.instance(), layer, layer_order)
+                
                 # Update sync timestamp
                 layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                 self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully updated from MapHub.")

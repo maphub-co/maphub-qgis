@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QDockWidget, QWidget, QVBoxLayout, QHBoxLayout, QTr
 from PyQt5.QtGui import QIcon, QDrag
 
 from ...utils.utils import get_maphub_client
-from ...utils.map_operations import download_map, add_map_as_tiling_service, add_folder_maps_as_tiling_services, download_folder_maps
+from ...utils.map_operations import download_map, add_map_as_tiling_service, add_folder_maps_as_tiling_services, download_folder_maps, load_and_sync_folder
 from ...utils.sync_manager import MapHubSyncManager
 from .MapItemDelegate import MapItemDelegate, STATUS_INDICATOR_ROLE
 from ...utils.error_manager import handled_exceptions
@@ -583,6 +583,13 @@ class MapBrowserDockWidget(QDockWidget):
 
         elif item_type == 'folder':
             # Folder context menu actions
+            action_load_and_sync = QAction("Load Project and Synchronize", self)
+            action_load_and_sync.triggered.connect(lambda: self.on_load_and_sync_clicked(item_id))
+            context_menu.addAction(action_load_and_sync)
+            
+            # Add separator
+            context_menu.addSeparator()
+            
             action_download_all = QAction("Download All Maps", self)
             action_download_all.triggered.connect(lambda: self.on_download_all_clicked(item_id))
             context_menu.addAction(action_download_all)
@@ -654,6 +661,11 @@ class MapBrowserDockWidget(QDockWidget):
     def on_tiling_all_clicked(self, folder_id):
         """Handle click on the tiling all button."""
         add_folder_maps_as_tiling_services(folder_id, self)
+        
+    @handled_exceptions
+    def on_load_and_sync_clicked(self, folder_id):
+        """Handle click on the load project and synchronize button."""
+        load_and_sync_folder(folder_id, self.iface, self)
         
     @handled_exceptions
     def on_sync_clicked(self, map_data, layer):
