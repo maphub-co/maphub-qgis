@@ -6,7 +6,7 @@ from qgis._core import QgsProject
 from .utils import get_maphub_client, get_default_download_location
 
 
-def get_project_folder_id() -> str | None:
+def get_project_folder_id() -> str:
     """
     Get the folder ID associated with the current project.
     
