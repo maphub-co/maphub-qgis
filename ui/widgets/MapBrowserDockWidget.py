@@ -9,7 +9,8 @@ from PyQt5.QtGui import QIcon, QDrag
 from ...utils.utils import get_maphub_client
 from ...utils.map_operations import download_map, add_map_as_tiling_service, add_folder_maps_as_tiling_services, download_folder_maps, load_and_sync_folder
 from ...utils.sync_manager import MapHubSyncManager
-from .MapItemDelegate import MapItemDelegate, STATUS_INDICATOR_ROLE
+from ...utils.project_utils import get_project_folder_id
+from .MapItemDelegate import MapItemDelegate, STATUS_INDICATOR_ROLE, PROJECT_FOLDER_ROLE
 from ...utils.error_manager import handled_exceptions
 
 
@@ -215,6 +216,9 @@ class MapBrowserDockWidget(QDockWidget):
 
         # Load workspaces
         self.load_workspaces()
+        
+        # Highlight the project folder after workspaces are loaded
+        QTimer.singleShot(1000, self.highlight_project_folder)
 
     def closeEvent(self, event):
         """Handle close event, clean up resources."""
@@ -865,12 +869,85 @@ class MapBrowserDockWidget(QDockWidget):
             'callback': callback
         })
         
+    def highlight_project_folder(self):
+        """
+        Find and highlight the folder associated with the current project.
+        """
+        # Get the folder ID associated with the current project
+        project_folder_id = get_project_folder_id()
+        
+        if not project_folder_id:
+            self.logger.debug("No project folder ID found, skipping highlighting")
+            return
+            
+        self.logger.debug(f"Highlighting project folder with ID: {project_folder_id}")
+        
+        # Clear any existing highlighting
+        self._clear_project_folder_highlighting(self.tree_widget.invisibleRootItem())
+        
+        # Find and highlight the folder item
+        self._find_and_highlight_folder(self.tree_widget.invisibleRootItem(), project_folder_id)
+
+    def _clear_project_folder_highlighting(self, parent_item):
+        """
+        Recursively clear project folder highlighting from all items.
+        
+        Args:
+            parent_item: The parent item to start from
+        """
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            # Clear the project folder role
+            child.setData(0, PROJECT_FOLDER_ROLE, None)
+            # Recursively clear highlighting from children
+            self._clear_project_folder_highlighting(child)
+
+    def _find_and_highlight_folder(self, parent_item, folder_id):
+        """
+        Recursively search for and highlight the folder with the given ID.
+        
+        Args:
+            parent_item: The parent item to start from
+            folder_id: The ID of the folder to highlight
+            
+        Returns:
+            bool: True if the folder was found and highlighted, False otherwise
+        """
+        # Check all children of the parent item
+        for i in range(parent_item.childCount()):
+            child = parent_item.child(i)
+            item_data = child.data(0, Qt.UserRole)
+            
+            if not item_data:
+                continue
+                
+            # Check if this is the folder we're looking for
+            if item_data.get('type') == 'folder' and item_data.get('id') == folder_id:
+                # Set the project folder role to highlight this item
+                child.setData(0, PROJECT_FOLDER_ROLE, True)
+                
+                # Make the folder bold to further emphasize it
+                font = child.font(0)
+                font.setBold(True)
+                child.setFont(0, font)
+                
+                self.logger.debug(f"Found and highlighted project folder: {child.text(0)}")
+                return True
+                
+            # Recursively search in child folders
+            if item_data.get('type') == 'folder' or item_data.get('type') == 'workspace':
+                if self._find_and_highlight_folder(child, folder_id):
+                    return True
+                    
+        return False
+        
     def refresh_browser(self):
         """
         Refresh the browser dock, including:
         - Update status indicators for connected maps
         - Reload contents of expanded folders to check for changes
         - Refresh workspaces and their root folders
+        - Highlight the folder associated with the current project
         """
         # Check if a refresh is already in progress
         if self.refresh_in_progress:
@@ -906,6 +983,10 @@ class MapBrowserDockWidget(QDockWidget):
             # Finally, refresh workspaces and their root folders
             self.logger.debug("Refreshing workspaces and root folders")
             self._refresh_workspaces()
+            
+            # Highlight the folder associated with the current project
+            self.logger.debug("Highlighting project folder")
+            self.highlight_project_folder()
             
             self.logger.debug("Browser refresh completed")
         finally:

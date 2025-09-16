@@ -94,11 +94,95 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             state: The new state of the checkbox
         """
         self.save_project_on_sync = state == Qt.Checked
+        
+    def _on_change_folder_clicked(self):
+        """
+        Handle click on the Change Folder button.
+        
+        This method shows the SaveProjectDialog to select a new folder,
+        updates the project's folder_id, and disconnects all connected layers.
+        """
+        # Show confirmation dialog first
+        result = QMessageBox.question(
+            self,
+            "Change Project Folder",
+            "Changing the project folder will disconnect all layers from MapHub. Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if result != QMessageBox.Yes:
+            return
+            
+        # Show the folder selection dialog
+        save_dialog = SaveProjectDialog(self)
+        result = save_dialog.exec_()
+        
+        if not result:
+            return
+            
+        # Get the selected folder_id
+        new_folder_id = save_dialog.get_selected_folder_id()
+        
+        if new_folder_id == self.folder_id:
+            QMessageBox.information(
+                self,
+                "No Change",
+                "The same folder was selected. No changes were made."
+            )
+            return
+            
+        # Disconnect all connected layers
+        connected_layers = []
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.customProperty("maphub/map_id") is not None:
+                connected_layers.append(layer)
+
+        sync_manager = MapHubSyncManager(self.iface)
+
+        # Disconnect each layer
+        for i, layer in enumerate(connected_layers):
+            sync_manager.disconnect_layer(layer)
+
+        
+        # Update the project's folder_id
+        QgsProject.instance().writeEntry("maphub", "folder_id", new_folder_id)
+        self.folder_id = new_folder_id
+        
+        # Update layer icons - use the existing decorator from the plugin instance
+        from qgis.utils import plugins
+        if 'MapHubPlugin' in plugins:
+            plugins['MapHubPlugin'].layer_decorator.update_layer_icons()
+        
+        # Clear and rebuild the folder name label
+        # First, remove the existing layout at index 0
+        old_layout = self.verticalLayout.itemAt(0)
+        if old_layout:
+            # Remove all widgets from the layout
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            # Remove the layout itself
+            self.verticalLayout.removeItem(old_layout)
+            
+        # Add the new folder name label
+        self._add_folder_name_label()
+        
+        # Repopulate the layers tree
+        self.populate_layers()
+        
+        QMessageBox.information(
+            self,
+            "Folder Changed",
+            f"Project folder changed successfully. All layers have been disconnected from MapHub."
+        )
     
     def _add_folder_name_label(self):
         """
         Add a label at the top of the dialog showing the folder name and a checkbox
         to specify whether the project should be saved when synchronizing.
+        Also adds a "Change Folder" button to allow changing the project's folder.
         """
         try:
             # Get the folder information using the MapHub client
@@ -120,6 +204,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             # Add the label to the horizontal layout
             folder_layout.addWidget(folder_label)
             
+            # Add a "Change Folder" button
+            change_folder_button = QPushButton("Change Folder")
+            change_folder_button.setToolTip("Change the project's folder (will disconnect all connected layers)")
+            change_folder_button.clicked.connect(self._on_change_folder_clicked)
+            folder_layout.addWidget(change_folder_button)
+            
             # Add a spacer to push the checkbox to the right
             folder_layout.addStretch()
             
@@ -137,6 +227,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             folder_layout = QHBoxLayout()
             folder_label = QLabel("Folder: Unknown")
             folder_layout.addWidget(folder_label)
+            
+            # Add a "Change Folder" button
+            change_folder_button = QPushButton("Change Folder")
+            change_folder_button.setToolTip("Change the project's folder (will disconnect all connected layers)")
+            change_folder_button.clicked.connect(self._on_change_folder_clicked)
+            folder_layout.addWidget(change_folder_button)
             
             # Add a spacer to push the checkbox to the right
             folder_layout.addStretch()

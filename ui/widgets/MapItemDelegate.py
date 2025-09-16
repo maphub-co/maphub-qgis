@@ -1,9 +1,11 @@
 from PyQt5.QtCore import Qt, QRect
-from PyQt5.QtWidgets import QStyledItemDelegate
-from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem
+from PyQt5.QtGui import QIcon, QBrush, QColor
 
 # Define a custom role for storing status indicator data
 STATUS_INDICATOR_ROLE = Qt.UserRole + 100
+# Define a custom role for identifying the project folder
+PROJECT_FOLDER_ROLE = Qt.UserRole + 101
 
 class MapItemDelegate(QStyledItemDelegate):
     """
@@ -19,15 +21,29 @@ class MapItemDelegate(QStyledItemDelegate):
         
     def paint(self, painter, option, index):
         """
-        Paint the item with a status indicator if available.
+        Paint the item with a status indicator if available and highlight if it's the project folder.
         
         Args:
             painter: The QPainter to use for drawing
             option: The style options for the item
             index: The model index of the item
         """
-        # First, paint the standard item using the parent class
-        super(MapItemDelegate, self).paint(painter, option, index)
+        # Check if this item is the project folder
+        is_project_folder = index.data(PROJECT_FOLDER_ROLE)
+        
+        # If this is the project folder, modify the style option to highlight it
+        if is_project_folder:
+            # Create a copy of the style option to modify
+            highlight_option = QStyleOptionViewItem(option)
+            
+            # Set a background color for highlighting (light blue)
+            highlight_option.backgroundBrush = QBrush(QColor(173, 216, 230, 100))
+            
+            # Paint the item with the modified style option
+            super(MapItemDelegate, self).paint(painter, highlight_option, index)
+        else:
+            # Paint the standard item using the parent class
+            super(MapItemDelegate, self).paint(painter, option, index)
         
         # Check if this item has a status indicator
         status_data = index.data(STATUS_INDICATOR_ROLE)
