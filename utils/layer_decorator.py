@@ -5,6 +5,7 @@ from qgis.core import QgsProject, QgsLayerTreeNode
 from qgis.gui import QgsLayerTreeViewIndicator
 
 from .sync_manager import MapHubSyncManager
+from .maphub_plugin_layer import MapHubPluginLayer
 
 
 class MapHubLayerDecorator:
@@ -99,6 +100,10 @@ class MapHubLayerDecorator:
         Returns:
             bool: True if the layer is connected to MapHub, False otherwise
         """
+        # Check if it's a MapHubPluginLayer
+        if isinstance(layer, MapHubPluginLayer):
+            return layer.map_id() is not None
+        # Check if it's a standard layer with MapHub properties
         return layer.customProperty("maphub/map_id") is not None
         
     def _update_layer_indicator(self, layer, node, layer_tree_view):

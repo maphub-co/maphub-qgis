@@ -3,6 +3,7 @@ from PyQt5.QtCore import Qt
 
 from .sync_manager import MapHubSyncManager
 from ..ui.dialogs.ConfirmSyncDialog import ConfirmSyncDialog
+from .maphub_plugin_layer import MapHubPluginLayer
 
 
 class MapHubLayerMenuProvider:
@@ -63,7 +64,7 @@ class MapHubLayerMenuProvider:
             return
             
         # Check if any selected layers are MapHub layers
-        maphub_layers = [layer for layer in selected if layer.customProperty("maphub/map_id")]
+        maphub_layers = [layer for layer in selected if isinstance(layer, MapHubPluginLayer) or layer.customProperty("maphub/map_id")]
         if not maphub_layers:
             return
             
@@ -92,7 +93,7 @@ class MapHubLayerMenuProvider:
             return
             
         # Check if any selected layers are MapHub layers
-        maphub_layers = [layer for layer in selected if layer.customProperty("maphub/map_id")]
+        maphub_layers = [layer for layer in selected if isinstance(layer, MapHubPluginLayer) or layer.customProperty("maphub/map_id")]
         if not maphub_layers:
             return
             

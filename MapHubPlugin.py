@@ -6,9 +6,10 @@ import os.path
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt, QEvent, QDataStream, QIODevice, QObject
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsApplication
 
 from .ui.dialogs.GetMapDialog import GetMapDialog
+from .utils.maphub_plugin_layer import MapHubPluginLayer, MapHubPluginLayerType
 from .ui.dialogs.CreateFolderDialog import CreateFolderDialog
 from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
 from .ui.dialogs.SettingsDialog import SettingsDialog
@@ -264,6 +265,10 @@ class MapHubPlugin(QObject):
         # Register drop handlers for drag and drop support
         self.iface.mapCanvas().setAcceptDrops(True)
         self.iface.mapCanvas().installEventFilter(self)
+        
+        # Register the MapHub plugin layer type
+        self.maphub_layer_type = MapHubPluginLayerType()
+        QgsApplication.pluginLayerRegistry().addPluginLayerType(self.maphub_layer_type)
         self.iface.layerTreeView().setAcceptDrops(True)
         self.iface.layerTreeView().installEventFilter(self)
 
@@ -302,6 +307,11 @@ class MapHubPlugin(QObject):
             self.iface.mapCanvas().removeEventFilter(self)
         if self.iface.layerTreeView():
             self.iface.layerTreeView().removeEventFilter(self)
+            
+        # Unregister the MapHub plugin layer type
+        if hasattr(self, 'maphub_layer_type'):
+            QgsApplication.pluginLayerRegistry().removePluginLayerType(MapHubPluginLayer.LAYER_TYPE)
+            self.maphub_layer_type = None
 
     def check_api_key(self):
         """Check if API key exists, prompt for it if not."""

@@ -15,6 +15,7 @@ from .SaveProjectDialog import SaveProjectDialog
 from ..widgets.ProgressDialog import ProgressDialog
 from ...utils.error_manager import ErrorManager
 from ...utils.layer_decorator import MapHubLayerDecorator
+from ...utils.maphub_plugin_layer import MapHubPluginLayer
 
 # Load the UI file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -306,7 +307,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         
         # Categorize layers by status
         for layer in all_layers:
-            is_connected = layer.customProperty("maphub/map_id") is not None
+            # Check if it's a MapHubPluginLayer or a standard layer with MapHub properties
+            is_connected = isinstance(layer, MapHubPluginLayer) or layer.customProperty("maphub/map_id") is not None
             
             if not is_connected:
                 not_connected_layers.append(layer)

@@ -4,9 +4,10 @@ import tempfile
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsApplication
 
 from ..maphub.exceptions import APIException
+from .maphub_plugin_layer import MapHubPluginLayer
 from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location, normalize_style_xml_and_hash, layer_position, place_layer_at_position
 
 
@@ -38,7 +39,9 @@ class MapHubSyncManager:
         """
         connected_layers = []
         for layer in QgsProject.instance().mapLayers().values():
-            if layer.customProperty("maphub/map_id"):
+            if isinstance(layer, MapHubPluginLayer):
+                connected_layers.append(layer)
+            elif layer.customProperty("maphub/map_id"):
                 connected_layers.append(layer)
         return connected_layers
     
@@ -53,7 +56,9 @@ class MapHubSyncManager:
             The layer if found, None otherwise
         """
         for layer in QgsProject.instance().mapLayers().values():
-            if layer.customProperty("maphub/map_id") == str(map_id):
+            if isinstance(layer, MapHubPluginLayer) and layer.map_id() == str(map_id):
+                return layer
+            elif layer.customProperty("maphub/map_id") == str(map_id):
                 return layer
         return None
     
@@ -76,16 +81,34 @@ class MapHubSyncManager:
             - "remote_error": Error checking remote status
             - "in_sync": Layer is in sync with MapHub
         """
-        if not layer.customProperty("maphub/map_id"):
-            return "not_connected"
+        # Handle MapHubPluginLayer
+        if isinstance(layer, MapHubPluginLayer):
+            if not layer.map_id():
+                return "not_connected"
+            
+            # Get properties from the MapHubPluginLayer
+            map_id = layer.map_id()
+            local_path = layer.local_path()
+            last_sync = layer.last_sync()
+            last_synced_version_id = layer.version_id()
+            last_synced_hash = layer.last_style_hash()
+        else:
+            # Handle standard layers with custom properties
+            if not layer.customProperty("maphub/map_id"):
+                return "not_connected"
+                
+            # Get properties from layer custom properties
+            map_id = layer.customProperty("maphub/map_id")
+            local_path = layer.customProperty("maphub/local_path")
+            last_sync = layer.customProperty("maphub/last_sync")
+            last_synced_version_id = layer.customProperty("maphub/last_version_id")
+            last_synced_hash = layer.customProperty("maphub/last_style_hash")
         
         # Check if local file exists
-        local_path = layer.customProperty("maphub/local_path")
         if not local_path or not os.path.exists(local_path):
             return "file_missing"
         
         # Check if local file is modified
-        last_sync = layer.customProperty("maphub/last_sync")
         if last_sync:
             last_sync_time = datetime.fromisoformat(last_sync)
             file_mod_time = datetime.fromtimestamp(os.path.getmtime(local_path))
@@ -94,14 +117,10 @@ class MapHubSyncManager:
         
         # Check if remote has newer version
         try:
-            map_id = layer.customProperty("maphub/map_id")
             map_info = get_maphub_client().maps.get_map(map_id)['map']
             
             # Get the latest version ID from the map info
             latest_version_id = map_info.get('latest_version_id')
-            
-            # Get the last synced version ID from layer properties
-            last_synced_version_id = layer.customProperty("maphub/last_version_id")
             
             # If we have both IDs and they're different, a new version exists
             if latest_version_id and last_synced_version_id and latest_version_id != last_synced_version_id:
@@ -130,9 +149,6 @@ class MapHubSyncManager:
                 remote_style_hash = normalize_style_xml_and_hash(map_info['visuals']['qgis'])
                 
                 if local_style_hash != remote_style_hash:
-                    # Get the last synced style hash (stored during last sync)
-                    last_synced_hash = layer.customProperty("maphub/last_style_hash")
-                    
                     if not last_synced_hash:
                         # First sync or no stored hash, can't determine which side changed
                         return "style_changed_remote"
@@ -195,7 +211,7 @@ class MapHubSyncManager:
         Pull style from MapHub and apply it to the layer.
         
         Args:
-            layer: The QGIS layer
+            layer: The QGIS layer (MapHubPluginLayer or standard layer with custom properties)
             map_id: The MapHub map ID
             
         Returns:
@@ -205,8 +221,21 @@ class MapHubSyncManager:
         if 'visuals' not in map_info or not map_info['visuals']:
             return False
 
+        # Handle MapHubPluginLayer
+        if isinstance(layer, MapHubPluginLayer):
+            # Apply the style
+            apply_style_to_layer(layer, map_info['visuals'])
+            
+            # Store the remote style hash for future comparison
+            if 'qgis' in map_info['visuals']:
+                # Use normalized XML for hash calculation to handle QGIS reordering elements
+                style_hash = normalize_style_xml_and_hash(map_info['visuals']['qgis'])
+                layer.set_last_style_hash(style_hash)
+                
+            return True
+        
+        # Legacy support for standard layers with custom properties
         layer_properties = {key: layer.customProperty(key) for key in layer.customProperties().keys()}
-        print(layer_properties)
             
         apply_style_to_layer(layer, map_info['visuals'])
 
@@ -221,8 +250,6 @@ class MapHubSyncManager:
             style_hash = normalize_style_xml_and_hash(map_info['visuals']['qgis'])
             layer.setCustomProperty("maphub/last_style_hash", style_hash)
 
-        print({key: layer.customProperty(key) for key in layer.customProperties().keys()})
-
         return True
     
     def synchronize_layer(self, layer, direction="auto", style_only=False):
@@ -230,7 +257,7 @@ class MapHubSyncManager:
         Synchronize a layer with its MapHub counterpart.
         
         Args:
-            layer: The QGIS layer
+            layer: The QGIS layer (MapHubPluginLayer or standard layer with custom properties)
             direction: The synchronization direction:
                 - "auto": Automatically determine direction based on status
                 - "push": Upload local changes to MapHub
@@ -240,11 +267,37 @@ class MapHubSyncManager:
         Raises:
             Exception: If synchronization fails
         """
-        if not layer.customProperty("maphub/map_id"):
+        # Handle MapHubPluginLayer
+        if isinstance(layer, MapHubPluginLayer):
+            if not layer.map_id():
+                self.show_error("Layer is not connected to MapHub")
+                return
+            map_id = layer.map_id()
+        # Legacy support for standard layers with custom properties
+        elif not layer.customProperty("maphub/map_id"):
+            # Convert to MapHubPluginLayer
             self.show_error("Layer is not connected to MapHub")
             return
-
-        map_id = layer.customProperty("maphub/map_id")
+        else:
+            # Get the map_id from custom properties
+            map_id = layer.customProperty("maphub/map_id")
+            
+            # Convert to MapHubPluginLayer
+            folder_id = layer.customProperty("maphub/folder_id")
+            local_path = layer.customProperty("maphub/local_path")
+            version_id = layer.customProperty("maphub/last_version_id")
+            
+            # Use connect_layer to convert to MapHubPluginLayer
+            self.connect_layer(layer, map_id, folder_id, local_path, version_id)
+            
+            # Find the newly created MapHubPluginLayer
+            new_layer = self.find_layer_by_map_id(map_id)
+            if new_layer:
+                # Recursively call synchronize_layer with the new MapHubPluginLayer
+                return self.synchronize_layer(new_layer, direction, style_only)
+            else:
+                self.show_error("Failed to convert layer to MapHubPluginLayer")
+                return
         
         if direction == "auto":
             status = self.get_layer_sync_status(layer)
@@ -291,15 +344,24 @@ class MapHubSyncManager:
                     # Store the current style hash for future comparison
                     if 'qgis' in style_json:
                         style_hash = normalize_style_xml_and_hash(style_json['qgis'])
-                        layer.setCustomProperty("maphub/last_style_hash", style_hash)
+                        if isinstance(layer, MapHubPluginLayer):
+                            layer.set_last_style_hash(style_hash)
+                        else:
+                            layer.setCustomProperty("maphub/last_style_hash", style_hash)
                     
                     # Update metadata
-                    layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                    if isinstance(layer, MapHubPluginLayer):
+                        layer.set_last_sync(datetime.now().isoformat())
+                    else:
+                        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                     
                     self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
                 else:
                     # Upload local changes to MapHub (full file upload)
-                    local_path = layer.customProperty("maphub/local_path")
+                    if isinstance(layer, MapHubPluginLayer):
+                        local_path = layer.local_path()
+                    else:
+                        local_path = layer.customProperty("maphub/local_path")
                     
                     # Get the current layer position and add it to the style
                     project = QgsProject.instance()
@@ -319,7 +381,10 @@ class MapHubSyncManager:
                     new_version_id = None
                     if 'task_id' in new_version:
                         new_version_id = str(new_version.get('task_id'))
-                        layer.setCustomProperty("maphub/last_version_id", new_version_id)
+                        if isinstance(layer, MapHubPluginLayer):
+                            layer.set_version_id(new_version_id)
+                        else:
+                            layer.setCustomProperty("maphub/last_version_id", new_version_id)
                     
                     # Rename/move the file to reflect the new version
                     if new_version_id:
@@ -330,9 +395,9 @@ class MapHubSyncManager:
                         file_extension = os.path.splitext(local_path)[1]
                         if not file_extension:
                             # Determine default extension based on layer type
-                            if isinstance(layer, QgsVectorLayer):
+                            if isinstance(layer, QgsVectorLayer) or (isinstance(layer, MapHubPluginLayer) and layer.delegate_layer and isinstance(layer.delegate_layer, QgsVectorLayer)):
                                 file_extension = '.fgb'  # Default to FlatGeobuf
-                            elif isinstance(layer, QgsRasterLayer):
+                            elif isinstance(layer, QgsRasterLayer) or (isinstance(layer, MapHubPluginLayer) and layer.delegate_layer and isinstance(layer.delegate_layer, QgsRasterLayer)):
                                 file_extension = '.tif'  # Default to GeoTIFF
                             else:
                                 file_extension = '.fgb'  # Default fallback
@@ -354,7 +419,12 @@ class MapHubSyncManager:
                                     dst_file.write(src_file.read())
                             
                             # Update the layer's source path
-                            layer.setCustomProperty("maphub/local_path", new_path)
+                            if isinstance(layer, MapHubPluginLayer):
+                                layer.set_local_path(new_path)
+                                # Recreate the delegate layer with the new path
+                                layer._create_delegate_layer()
+                            else:
+                                layer.setCustomProperty("maphub/local_path", new_path)
                             
                             # For shapefiles, copy all related files and delete old ones
                             if file_extension.lower() == '.shp':
@@ -374,7 +444,10 @@ class MapHubSyncManager:
                             os.remove(old_path)
                     
                     # Update metadata
-                    layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                    if isinstance(layer, MapHubPluginLayer):
+                        layer.set_last_sync(datetime.now().isoformat())
+                    else:
+                        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                     
                     self.iface.messageBar().pushSuccess("MapHub", f"Layer '{layer.name()}' successfully uploaded to MapHub.")
                 
@@ -384,7 +457,10 @@ class MapHubSyncManager:
                     # Only download and apply the style, not the entire file
                     if self._pull_and_apply_style(layer, map_id):
                         # Update sync timestamp
-                        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                        if isinstance(layer, MapHubPluginLayer):
+                            layer.set_last_sync(datetime.now().isoformat())
+                        else:
+                            layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
                         
                         self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully updated from MapHub.")
                 else:
@@ -610,15 +686,35 @@ class MapHubSyncManager:
         
         # Connect the layer to MapHub if requested
         if connect_layer:
-            # Get folder_id from map_info if not already available
+            # Get folder_id and workspace_id from map_info if not already available
             folder_id = map_info.get('folder_id', '')
+            workspace_id = map_info.get('workspace_id', '')
             
-            self.connect_layer(
-                layer,
+            # Create a MapHubPluginLayer instead of connecting a standard layer
+            # First, get the layer position and style
+            project = QgsProject.instance()
+            position = layer_position(project, layer)
+            style_dict = get_layer_styles_as_json(layer, {})
+            
+            # Remove the standard layer
+            QgsProject.instance().removeMapLayer(layer.id())
+            
+            # Create a MapHubPluginLayer
+            layer = self.create_maphub_layer(
                 map_id,
                 folder_id,
-                path
+                workspace_id,
+                version_id,
+                layer_name
             )
+            
+            # Apply the style
+            if style_dict and 'qgis' in style_dict:
+                apply_style_to_layer(layer, style_dict)
+                
+            # Place the layer at the correct position
+            if position:
+                place_layer_at_position(project, layer, position)
             
         # Apply the style from MapHub
         self._pull_and_apply_style(layer, map_id)
@@ -630,8 +726,7 @@ class MapHubSyncManager:
         """
         Connect a layer to a MapHub map.
         
-        This method stores connection information in the layer's custom properties,
-        establishing a link between the local QGIS layer and a remote MapHub map.
+        This method is deprecated. Use create_maphub_layer instead.
         
         Args:
             layer: The QGIS layer to connect
@@ -642,77 +737,98 @@ class MapHubSyncManager:
             
         Returns:
             None
-            
-        Raises:
-            ValueError: If any of the required parameters are invalid
         """
-        # Store MapHub connection information in layer properties
-        layer.setCustomProperty("maphub/map_id", str(map_id))
-        layer.setCustomProperty("maphub/folder_id", str(folder_id))
-        layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
-        layer.setCustomProperty("maphub/local_path", local_path)
-
-        if version_id:
-            layer.setCustomProperty("maphub/last_version_id", str(version_id))
-        else:
-            # Store initial version ID for future comparison
-            try:
-                # Get the map info to retrieve the latest version ID
-                map_info = get_maphub_client().maps.get_map(map_id)['map']
-                if 'latest_version_id' in map_info:
-                    layer.setCustomProperty("maphub/last_version_id", str(map_info.get('latest_version_id')))
-            except Exception as e:
-                print(f"Error storing initial version ID: {e}")
-        
-        # Store initial style hash for future comparison
+        # Get the workspace_id from the map info
         try:
-            # Get the current style hash
-            style_dict = self.get_layer_style_as_dict(layer)
-            if 'qgis' in style_dict:
-                style_hash = hashlib.md5(style_dict['qgis'].encode()).hexdigest()
-                layer.setCustomProperty("maphub/last_style_hash", style_hash)
-        except Exception as e:
-            print(f"Error storing initial style hash: {e}")
+            map_info = get_maphub_client().maps.get_map(map_id)['map']
+            workspace_id = map_info.get('workspace_id', '')
+        except Exception:
+            workspace_id = ''
+            
+        # Get the layer position and style
+        project = QgsProject.instance()
+        position = layer_position(project, layer)
+        style_dict = get_layer_styles_as_json(layer, {})
         
-        self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' connected to MapHub.")
+        # Remove the standard layer
+        QgsProject.instance().removeMapLayer(layer.id())
+        
+        # Create a MapHubPluginLayer
+        new_layer = self.create_maphub_layer(
+            map_id,
+            folder_id,
+            workspace_id,
+            version_id,
+            layer.name()
+        )
+        
+        # Apply the style
+        if style_dict and 'qgis' in style_dict:
+            apply_style_to_layer(new_layer, style_dict)
+            
+        # Place the layer at the correct position
+        if position:
+            place_layer_at_position(project, new_layer, position)
+            
+        self.iface.messageBar().pushInfo("MapHub", f"Layer '{new_layer.name()}' connected to MapHub.")
     
     def disconnect_layer(self, layer):
         """
         Disconnect a layer from MapHub.
         
-        This method removes all MapHub connection information from the layer's
-        custom properties, effectively breaking the link between the local QGIS
-        layer and the remote MapHub map.
+        This method handles both MapHubPluginLayer instances and standard layers
+        with custom properties.
         
         Args:
             layer: The QGIS layer to disconnect
             
         Returns:
             None
-            
-        Raises:
-            None
         """
+        if isinstance(layer, MapHubPluginLayer):
+            # Use the layer's disconnect method
+            layer.disconnect_from_maphub()
+            self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' disconnected from MapHub.")
+            return
+            
+        # Legacy support for standard layers with custom properties
         if not layer.customProperty("maphub/map_id"):
             return
+            
+        # Get the layer position and style
+        project = QgsProject.instance()
+        position = layer_position(project, layer)
+        style_dict = get_layer_styles_as_json(layer, {})
+        local_path = layer.customProperty("maphub/local_path")
         
-        # Remove MapHub properties
-        layer.removeCustomProperty("maphub/map_id")
-        layer.removeCustomProperty("maphub/folder_id")
-        layer.removeCustomProperty("maphub/workspace_id")
-        layer.removeCustomProperty("maphub/last_sync")
-        layer.removeCustomProperty("maphub/local_path")
-        layer.removeCustomProperty("maphub/last_style_hash")
-        layer.removeCustomProperty("maphub/last_version_id")
+        # Create a new standard layer with the same source
+        if layer.type() == 0:  # Vector layer
+            new_layer = QgsVectorLayer(local_path, f"{layer.name()} (Disconnected)", "ogr")
+        else:  # Raster layer
+            new_layer = QgsRasterLayer(local_path, f"{layer.name()} (Disconnected)")
+            
+        # Apply the style
+        if style_dict and 'qgis' in style_dict:
+            apply_style_to_layer(new_layer, style_dict)
+            
+        # Remove the old layer
+        QgsProject.instance().removeMapLayer(layer.id())
         
-        self.iface.messageBar().pushInfo("MapHub", f"Layer '{layer.name()}' disconnected from MapHub.")
+        # Add the new layer
+        QgsProject.instance().addMapLayer(new_layer)
+        
+        # Place the layer at the correct position
+        if position:
+            place_layer_at_position(project, new_layer, position)
+            
+        self.iface.messageBar().pushInfo("MapHub", f"Layer '{new_layer.name()}' disconnected from MapHub.")
     
     def show_style_conflict_resolution_dialog(self, layer):
         """
         Show a dialog for resolving style conflicts when both local and remote styles have changed.
         
         Args:
-            layer: The QGIS layer with style conflicts
+            layer: The QGIS layer with style conflicts (MapHubPluginLayer or standard layer with custom properties)
         """
         from PyQt5.QtWidgets import QMessageBox
         
@@ -727,7 +843,10 @@ class MapHubSyncManager:
         
         if response == QMessageBox.Save:
             # Upload local style to MapHub (style only)
-            map_id = layer.customProperty("maphub/map_id")
+            if isinstance(layer, MapHubPluginLayer):
+                map_id = layer.map_id()
+            else:
+                map_id = layer.customProperty("maphub/map_id")
             
             # Get the current layer position and add it to the style
             project = QgsProject.instance()
@@ -743,14 +862,24 @@ class MapHubSyncManager:
             # Store the current style hash for future comparison
             if 'qgis' in style_json:
                 style_hash = normalize_style_xml_and_hash(style_json['qgis'])
-                layer.setCustomProperty("maphub/last_style_hash", style_hash)
+                if isinstance(layer, MapHubPluginLayer):
+                    layer.set_last_style_hash(style_hash)
+                else:
+                    layer.setCustomProperty("maphub/last_style_hash", style_hash)
             
             # Update metadata
-            layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+            if isinstance(layer, MapHubPluginLayer):
+                layer.set_last_sync(datetime.now().isoformat())
+            else:
+                layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                
             self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
         elif response == QMessageBox.Open:
             # Download remote style from MapHub (style only)
-            map_id = layer.customProperty("maphub/map_id")
+            if isinstance(layer, MapHubPluginLayer):
+                map_id = layer.map_id()
+            else:
+                map_id = layer.customProperty("maphub/map_id")
             
             # Get map info to retrieve layer_order
             map_info = get_maphub_client().maps.get_map(map_id)['map']
@@ -762,7 +891,11 @@ class MapHubSyncManager:
                     place_layer_at_position(QgsProject.instance(), layer, layer_order)
                 
                 # Update sync timestamp
-                layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                if isinstance(layer, MapHubPluginLayer):
+                    layer.set_last_sync(datetime.now().isoformat())
+                else:
+                    layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+                    
                 self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully updated from MapHub.")
     
     def show_error(self, message, exception=None):
@@ -775,3 +908,29 @@ class MapHubSyncManager:
         """
         from .error_manager import ErrorManager
         ErrorManager.show_error(message, exception)
+        
+    def create_maphub_layer(self, map_id, folder_id, workspace_id, version_id=None, map_name=None):
+        """
+        Create a new MapHub plugin layer.
+        
+        Args:
+            map_id: The MapHub map ID
+            folder_id: The MapHub folder ID
+            workspace_id: The MapHub workspace ID
+            version_id: The MapHub version ID (optional)
+            map_name: The name to give the layer (optional)
+            
+        Returns:
+            The created MapHub plugin layer
+        """
+        # Create the layer
+        layer = MapHubPluginLayer(map_id, folder_id, workspace_id, version_id)
+        
+        # Set the layer name if provided
+        if map_name:
+            layer.setName(map_name)
+        
+        # Add the layer to the project
+        QgsProject.instance().addMapLayer(layer)
+        
+        return layer

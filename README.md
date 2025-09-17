@@ -13,6 +13,7 @@ MapHub is a community hub for GIS users to host, visualize, and share geospatial
 - [x] Layer-based synchronization between QGIS and MapHub
 - [x] Comprehensive synchronization dialog with clear visual indicators
 - [x] Folder-level synchronization for batch operations
+- [x] Custom MapHub layer type with automatic file handling
 - [ ] And much more ...
 
 ## Installation

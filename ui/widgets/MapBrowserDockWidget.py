@@ -9,6 +9,7 @@ from PyQt5.QtGui import QIcon, QDrag
 from ...utils.utils import get_maphub_client
 from ...utils.map_operations import download_map, add_map_as_tiling_service, add_folder_maps_as_tiling_services, download_folder_maps, load_and_sync_folder
 from ...utils.sync_manager import MapHubSyncManager
+from ...utils.maphub_plugin_layer import MapHubPluginLayer
 from ...utils.project_utils import get_project_folder_id
 from .MapItemDelegate import MapItemDelegate, STATUS_INDICATOR_ROLE, PROJECT_FOLDER_ROLE
 from ...utils.error_manager import handled_exceptions

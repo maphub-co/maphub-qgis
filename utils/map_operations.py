@@ -277,7 +277,7 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
                 map_id=map_data['id'],
                 file_format=selected_format,
                 layer_name=map_data.get('name'),
-                connect_layer=False  # Ensure the layer is connected
+                connect_layer=True  # Ensure the layer is connected
             )
 
             if layer and layer.isValid():
@@ -362,13 +362,26 @@ def load_and_sync_folder(folder_id: str, iface, parent=None) -> None:
     success_count = 0
     errors = []
     
-    for i, layer in enumerate(connected_layers):
+    # Create a copy of the connected layers list to avoid issues with deleted layers
+    layers_to_sync = connected_layers.copy()
+    
+    for i, layer in enumerate(layers_to_sync):
         try:
+            # Check if the layer is still valid and in the project
+            if not QgsProject.instance().mapLayer(layer.id()):
+                continue
+                
             # Synchronize the layer (auto direction will determine the appropriate action)
             sync_manager.synchronize_layer(layer, direction="auto")
             success_count += 1
         except Exception as e:
-            errors.append(f"Error synchronizing layer {layer.name()}: {str(e)}")
+            try:
+                # Try to get the layer name safely
+                layer_name = layer.name() if hasattr(layer, 'name') else "Unknown"
+                errors.append(f"Error synchronizing layer {layer_name}: {str(e)}")
+            except RuntimeError:
+                # Handle case where layer object has been deleted
+                errors.append(f"Error synchronizing layer (layer was deleted): {str(e)}")
         
         # Update progress
         progress.setValue(i + 1)
