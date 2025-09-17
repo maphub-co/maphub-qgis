@@ -8,20 +8,15 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
 from qgis.core import QgsProject
 
-from .ui.dialogs.CloneFolderDialog import CloneFolderDialog
 from .ui.dialogs.GetMapDialog import GetMapDialog
 from .ui.dialogs.CreateFolderDialog import CreateFolderDialog
 from .ui.dialogs.ApiKeyDialog import ApiKeyDialog
 from .ui.dialogs.SettingsDialog import SettingsDialog
 from .ui.dialogs.UploadMapDialog import UploadMapDialog
-from .ui.dialogs.PullProjectDialog import PullProjectDialog
-from .ui.dialogs.PushProjectDialog import PushProjectDialog
-from .ui.dialogs.SaveProjectDialog import SaveProjectDialog
 from .ui.widgets.MapBrowserDockWidget import MapBrowserDockWidget, MapBrowserTreeWidget
 from .utils.scheduler_manager import SchedulerManager
 from .utils.error_manager import handled_exceptions, ensure_api_key
-from .utils.map_operations import download_map, download_folder_maps
-from .utils.project_utils import save_project
+from .utils.map_operations import download_map
 
 
 
@@ -235,15 +230,6 @@ class MapHubPlugin(QObject):
             add_to_toolbar=True
         )
         
-        # Add save project action
-        self.add_action(
-            os.path.join(self.plugin_dir, 'icons', 'save_project.svg'),
-            text=self.tr(u'Save Project to MapHub'),
-            callback=self.save_project_to_folder,
-            parent=self.iface.mainWindow(),
-            add_to_toolbar=True
-        )
-        
         # Add settings action
         self.add_action(
             os.path.join(self.plugin_dir, 'icons', 'settings.svg'),
@@ -365,62 +351,6 @@ class MapHubPlugin(QObject):
 
     @handled_exceptions
     @ensure_api_key
-    def pull_project(self, checked=False):
-        """Show pull project dialog to update the current project with latest data from MapHub."""
-        dlg = PullProjectDialog(self.iface, self.iface.mainWindow())
-        result = dlg.exec_()
-
-    @handled_exceptions
-    @ensure_api_key
-    def push_project(self, checked=False):
-        """Show push project dialog to push the current project data to MapHub."""
-        dlg = PushProjectDialog(self.iface, self.iface.mainWindow())
-        result = dlg.exec_()
-        
-    @handled_exceptions
-    @ensure_api_key
-    def save_project_to_folder(self, checked=False):
-        """Save the current project to a MapHub folder."""
-        # Get the current project
-        project = QgsProject.instance()
-        
-        # Check if the project already has a folder_id associated
-        folder_id, _ = project.readEntry("maphub", "folder_id", "")
-        
-        if not folder_id:
-            # If no folder_id exists, show dialog to select a folder
-            dlg = SaveProjectDialog(self.iface.mainWindow())
-            result = dlg.exec_()
-
-            if not result:
-                raise Exception("A folder_id has to be set to save the project to MapHub.")
-
-            # Get the selected folder_id
-            folder_id = dlg.get_selected_folder_id()
-
-            project.writeEntry("maphub", "folder_id", folder_id)
-
-
-        # If folder_id exists, save directly to that folder
-        try:
-            save_project(folder_id)
-            self.iface.messageBar().pushMessage(
-                "Success",
-                "Project saved to MapHub successfully",
-                level=0,
-                duration=5
-            )
-        except Exception as e:
-            self.iface.messageBar().pushMessage(
-                "Error",
-                f"Failed to save project to MapHub: {str(e)}",
-                level=2,
-                duration=5
-            )
-
-
-    @handled_exceptions
-    @ensure_api_key
     def show_map_browser(self, checked=False):
         """Show the map browser dock widget."""
         if self.map_browser_dock is None:
@@ -434,19 +364,6 @@ class MapHubPlugin(QObject):
             # If the dock widget exists but is hidden, show it
             self.map_browser_dock.setVisible(True)
 
-    @handled_exceptions
-    @ensure_api_key
-    def clone_project(self, checked=False):
-        """Show the clone project dialog to clone a directory from MapHub."""
-        dlg = CloneFolderDialog(self.iface, self.iface.mainWindow())
-
-        def on_clone_completed(project_path):
-            if project_path:
-                self.iface.addProject(project_path)
-
-        dlg.cloneCompleted.connect(on_clone_completed)
-
-        result = dlg.exec_()
         
     def on_layers_changed(self):
         """Update layer icons when layers are added or removed."""
