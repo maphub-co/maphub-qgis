@@ -620,13 +620,9 @@ class MapHubSyncManager:
                 path
             )
             
-            # Apply the style from MapHub
-            self._pull_and_apply_style(layer, map_id)
-            
-            # Place the layer at the correct position if layer_order exists
-            layer_order = map_info.get('visuals', {}).get('layer_order')
-            if layer_order:
-                place_layer_at_position(QgsProject.instance(), layer, layer_order)
+        # Apply the style from MapHub
+        self._pull_and_apply_style(layer, map_id)
+
         
         return layer
 

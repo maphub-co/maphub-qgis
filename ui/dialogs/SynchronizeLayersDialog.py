@@ -7,13 +7,14 @@ from qgis.core import QgsProject
 
 from .MapHubBaseDialog import MapHubBaseDialog
 from .UploadMapDialog import UploadMapDialog
-from .BatchConnectLayersDialog import BatchConnectLayersDialog
 from ...utils.sync_manager import MapHubSyncManager
 from ...utils.status_icon_manager import StatusIconManager
-from ...utils.project_utils import get_project_folder_id, save_project
+from ...utils.project_utils import get_project_folder_id, save_project_to_maphub
 from ...utils.utils import get_maphub_client
 from .SaveProjectDialog import SaveProjectDialog
 from ..widgets.ProgressDialog import ProgressDialog
+from ...utils.error_manager import ErrorManager
+from ...utils.layer_decorator import MapHubLayerDecorator
 
 # Load the UI file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
@@ -321,6 +322,11 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 upload_layers.append((layer, status))  # Default to upload, but will show conflict resolution UI
             else:
                 in_sync_layers.append((layer, status))
+
+        # Update layer icons - use the existing decorator from the plugin instance
+        # This prevents creating multiple decorators that might add duplicate indicators
+        layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
+        layer_decorator.update_layer_icons()
         
         # Define group headers with colors
         groups = [
@@ -597,7 +603,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         if not selected_items and not selected_not_connected:
             # If save_project_on_sync is true, save the project even if no layers are selected
             if self.save_project_on_sync:
-                save_project(folder_id=self.folder_id)
+                save_project_to_maphub(folder_id=self.folder_id)
                 QMessageBox.information(
                     self,
                     "Project Saved",
@@ -641,12 +647,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                     )
                     connect_count += 1
                 except Exception as e:
-                    from ...utils.error_manager import ErrorManager
                     ErrorManager.show_error(f"Failed to connect layer '{layer.name()}'", e, self)
-                
-                # Check if user canceled
-                if progress.result() == QDialog.Rejected:
-                    break
+
         
         # Then, synchronize connected layers
         start_index = len(selected_not_connected)
@@ -658,26 +660,16 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 self.sync_manager.synchronize_layer(layer, direction, style_only)
                 success_count += 1
             except Exception as e:
-                from ...utils.error_manager import ErrorManager
                 ErrorManager.show_error(f"Failed to synchronize layer '{layer.name()}'", e, self)
-            
-            # Check if user canceled
-            if progress.result() == QDialog.Rejected:
-                break
+
         
         # Close progress dialog
         progress.accept()
         
         # Update layer icons - use the existing decorator from the plugin instance
         # This prevents creating multiple decorators that might add duplicate indicators
-        from qgis.utils import plugins
-        if 'MapHubPlugin' in plugins:
-            plugins['MapHubPlugin'].layer_decorator.update_layer_icons()
-        else:
-            # Fallback if plugin instance is not available
-            from ...utils.layer_decorator import MapHubLayerDecorator
-            layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
-            layer_decorator.update_layer_icons()
+        layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
+        layer_decorator.update_layer_icons()
         
         # Show success message
         if connect_count > 0 and success_count > 0:
@@ -690,7 +682,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
 
         # Save the project if the checkbox is checked
         if self.save_project_on_sync:
-            save_project(folder_id=self.folder_id)
+            save_project_to_maphub(folder_id=self.folder_id)
 
         QMessageBox.information(
             self,

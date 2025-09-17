@@ -48,14 +48,11 @@ def folder_has_project(folder_id):
 
 
 def save_project_to_maphub(folder_id):
-    # Get the current project
-    project = QgsProject.instance()
-
-    if not folder_id:
-        folder_id, _ = project.readEntry("maphub", "folder_id", "")
-
     if not folder_id:
         raise Exception("Cloud not infer folder_id from project.")
+
+    # Get the current project
+    project = QgsProject.instance()
 
     # Check if the project has been saved
     if project.fileName() == "":
