@@ -488,44 +488,6 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             if tooltip:
                 item.setToolTip(column, tooltip)
     
-    def on_batch_connect_clicked(self, default_folder_id=None):
-        """
-        Handle click on the Batch Connect Layers button.
-        
-        Args:
-            default_folder_id: Optional default folder ID to select
-        """
-        # Get all not connected layers
-        not_connected_layers = []
-        
-        # Find the "LAYERS NOT CONNECTED" group
-        for i in range(self.layersTree.topLevelItemCount()):
-            group_item = self.layersTree.topLevelItem(i)
-            if group_item.text(0) == "LAYERS NOT CONNECTED":
-                for j in range(group_item.childCount()):
-                    child_item = group_item.child(j)
-                    layer = child_item.data(0, Qt.UserRole)
-                    not_connected_layers.append(layer)
-                break
-        
-        if not not_connected_layers:
-            QMessageBox.information(
-                self,
-                "No Layers to Connect",
-                "All layers are already connected to MapHub."
-            )
-            return
-        
-        # Open the batch connect dialog
-        batch_dialog = BatchConnectLayersDialog(self.iface, not_connected_layers, self, default_folder_id)
-        result = batch_dialog.exec_()
-        
-        # Refresh the dialog if layers were connected
-        if result == QDialog.Accepted:
-            self.populate_layers()
-            # Additional refresh to ensure checkboxes are visible
-            self.refresh_tree()
-    
     def on_connect_clicked(self, layer):
         """
         Handle click on the Connect button for a non-connected layer.
