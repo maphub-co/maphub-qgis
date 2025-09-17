@@ -1,9 +1,9 @@
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PyQt5.QtCore import Qt
 
+from ...utils.project_utils import folder_has_project
 from ..dialogs.MapHubBaseDialog import MapHubBaseDialog
 from ..widgets.WorkspaceNavigationWidget import WorkspaceNavigationWidget
-from ...utils.error_manager import handled_exceptions
 
 
 class SaveProjectDialog(MapHubBaseDialog):
@@ -87,3 +87,35 @@ class SaveProjectDialog(MapHubBaseDialog):
             str: The ID of the selected folder, or None if no folder was selected
         """
         return self.selected_folder_id
+
+    def accept(self):
+        """Override accept to check for existing project before accepting the dialog"""
+        # Get the selected folder ID
+        folder_id = self.selected_folder_id
+
+        if not folder_id:
+            # No folder selected, show an error
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "No Folder Selected", "Please select a folder to save the project to.")
+            return
+
+        # Check if the folder already has a project
+        if folder_has_project(folder_id):
+            # Show confirmation dialog
+            from PyQt5.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self,
+                "Project Already Exists",
+                "This folder already has a QGIS project. Do you want to overwrite it?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.No:
+                # User chose not to overwrite, cancel the save
+                # Don't call super().accept() to ensure the dialog stays open
+                return
+
+        # If we get here, either there's no existing project or the user confirmed overwrite
+        # Call the parent class's accept method to close the dialog
+        super(SaveProjectDialog, self).accept()
