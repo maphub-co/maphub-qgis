@@ -158,7 +158,7 @@ class MapHubPlugin(QObject):
 
         icon_path = os.path.join(self.plugin_dir, 'icons', 'icon.png')
         self.add_action(
-            os.path.join(self.plugin_dir, 'get.png'),
+            os.path.join(self.plugin_dir, 'icons', 'get.svg'),
             text=self.tr(u'Get map'),
             callback=self.get_map,
             parent=self.iface.mainWindow(),
