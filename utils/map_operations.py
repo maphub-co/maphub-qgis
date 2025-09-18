@@ -397,6 +397,11 @@ def fix_missing_data_maphub_layer(layer):
     sync_manager = MapHubSyncManager(iface)
     status = sync_manager.get_layer_sync_status(layer)
 
+    print(f"Fixing missing data for layer '{layer.name()}'")
+    print(f"Status: {status}")
+
+    print(f"Custom properties: {layer.customProperties()}")
+
     if status != "file_missing":
         return
 
