@@ -7,7 +7,8 @@ from typing import Dict, Any, List, Optional
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
 from ..maphub.exceptions import APIException
-from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location, normalize_style_xml_and_hash, layer_position, place_layer_at_position
+from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location, \
+    normalize_style_xml_and_hash, layer_position, place_layer_at_position, get_maphub_download_location
 
 
 class MapHubSyncManager:
@@ -80,7 +81,7 @@ class MapHubSyncManager:
             return "not_connected"
         
         # Check if local file exists
-        local_path = layer.customProperty("maphub/local_path")
+        local_path = get_maphub_download_location(layer)
         if not local_path or not os.path.exists(local_path):
             return "file_missing"
         
@@ -115,6 +116,11 @@ class MapHubSyncManager:
         except Exception as e:
             print(f"Error checking remote status: {e}")
             return "remote_error"
+
+        # Check if local file exists
+        local_path = get_maphub_download_location(layer)
+        if not local_path or not os.path.exists(local_path):
+            return "file_missing"
         
         # Check if styles differ
         # Calculate the current style hash on demand from the local layer
@@ -499,6 +505,7 @@ class MapHubSyncManager:
 
             # Get the map ID from the result
             map_id = result.get('map_id')
+            version_id = result.get('id')
 
             # Update the layer visuals with the uploaded map style including layer position
             client.maps.set_visuals(map_id, style_json)
@@ -510,7 +517,7 @@ class MapHubSyncManager:
                 if isinstance(layer, QgsVectorLayer) and not is_file_based:
                     # Create a permanent copy of the temporary file in the default download location
                     default_dir = get_default_download_location()
-                    permanent_path = os.path.join(str(default_dir), f"{map_name}{file_extension}")
+                    permanent_path = os.path.join(str(default_dir), f"{map_name}_{version_id}{file_extension}")
                     
                     # Ensure filename is unique
                     counter = 1
@@ -537,7 +544,8 @@ class MapHubSyncManager:
                     layer,
                     map_id,
                     folder_id,
-                    local_path
+                    local_path,
+                    version_id
                 )
 
     def download_map(self, map_id, version_id=None, path=None, file_format=None, layer_name=None, connect_layer=True):

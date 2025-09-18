@@ -411,23 +411,12 @@ def fix_missing_data_maphub_layer(layer):
     map_info = get_maphub_client().maps.get_map(map_id)['map']
     version_id = map_info.get('latest_version_id')
 
-    # Get default download location
-    default_dir = get_default_download_location()
-
-    # Determine file extension based on layer type
-    if isinstance(layer, QgsVectorLayer):
-        file_extension = '.fgb'  # Default to FlatGeobuf
-    elif isinstance(layer, QgsRasterLayer):
-        file_extension = '.tif'  # Default to GeoTIFF
-    else:
-        file_extension = '.fgb'  # Default fallback
-
     # Create new file path with map_id and version_id
-    new_path = os.path.join(str(default_dir), f"{map_id}_{version_id}{file_extension}")
+    maphub_path = get_maphub_download_location(layer)
 
     # Download the file
-    if not os.path.exists(new_path):
-        get_maphub_client().versions.download_version(version_id, new_path, file_extension.replace('.', ''))
+    if not os.path.exists(maphub_path):
+        get_maphub_client().versions.download_version(version_id, maphub_path)
 
     # Store the layer name and custom properties
     layer_name = layer.name()
@@ -439,24 +428,21 @@ def fix_missing_data_maphub_layer(layer):
 
     # Create a new layer with the downloaded file but don't add it to the project yet
     if isinstance(layer, QgsVectorLayer):
-        new_layer = QgsVectorLayer(new_path, layer_name, "ogr")
+        new_layer = QgsVectorLayer(maphub_path, layer_name, "ogr")
     elif isinstance(layer, QgsRasterLayer):
-        new_layer = QgsRasterLayer(new_path, layer_name)
+        new_layer = QgsRasterLayer(maphub_path, layer_name)
     else:
         sync_manager.show_error(f"Unsupported layer type for '{layer_name}'")
         return
 
     if not new_layer or not new_layer.isValid():
-        sync_manager.show_error(f"Failed to create layer from {new_path}")
+        sync_manager.show_error(f"Failed to create layer from {maphub_path}")
         return
 
     # Transfer custom properties to the new layer
     for key, value in layer_properties.items():
-        if key != "maphub/local_path":  # Update local_path with the new path
             new_layer.setCustomProperty(key, value)
 
-    # Update the new layer's properties
-    new_layer.setCustomProperty("maphub/local_path", new_path)
     new_layer.setCustomProperty("maphub/last_version_id", version_id)
     # new_layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
 

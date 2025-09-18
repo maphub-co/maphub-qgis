@@ -1,8 +1,10 @@
 import hashlib
+import os
 from pathlib import Path
 from typing import Dict, Any
 from xml.etree import ElementTree as ET
 
+from qgis._core import QgsVectorLayer, QgsRasterLayer
 from qgis.core import QgsMapLayer
 from qgis.PyQt.QtCore import QSettings, QStandardPaths
 from PyQt5.QtXml import QDomDocument
@@ -51,6 +53,19 @@ def get_default_download_location():
     Path(default_location).mkdir(parents=True, exist_ok=True)
     
     return Path(default_location)
+
+def get_maphub_download_location(layer):
+    map_id = layer.customProperty("maphub/map_id")
+    last_synced_version_id = layer.customProperty("maphub/last_version_id")
+
+    if isinstance(layer, QgsVectorLayer):
+        file_extension = '.fgb'  # Default to FlatGeobuf
+    elif isinstance(layer, QgsRasterLayer):
+        file_extension = '.tif'  # Default to GeoTIFF
+    else:
+        raise Exception("Unsupported layer type.")
+
+    return Path(os.path.join(get_default_download_location(), f"{map_id}_{last_synced_version_id}{file_extension}"))
 
 
 def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:
