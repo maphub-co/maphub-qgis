@@ -10,7 +10,8 @@ from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
 # from .. import utils
-from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position, get_default_download_location, layer_position
+from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position, get_default_download_location, \
+    layer_position, get_maphub_download_location
 from .sync_manager import MapHubSyncManager
 from .project_utils import load_maphub_project
 
@@ -396,11 +397,6 @@ def load_and_sync_folder(folder_id: str, iface, parent=None) -> None:
 def fix_missing_data_maphub_layer(layer):
     sync_manager = MapHubSyncManager(iface)
     status = sync_manager.get_layer_sync_status(layer)
-
-    print(f"Fixing missing data for layer '{layer.name()}'")
-    print(f"Status: {status}")
-
-    print(f"Custom properties: {layer.customProperties()}")
 
     if status != "file_missing":
         return

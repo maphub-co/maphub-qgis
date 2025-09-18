@@ -487,41 +487,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             item.setIcon(column, icon)
             if tooltip:
                 item.setToolTip(column, tooltip)
-    
-    def on_connect_clicked(self, layer):
-        """
-        Handle click on the Connect button for a non-connected layer.
-        
-        Args:
-            layer: The layer to connect
-        """
-        # Create a dialog to choose between uploading a new map or connecting to an existing one
-        choice_dialog = QMessageBox(self)
-        choice_dialog.setWindowTitle("Connect Layer")
-        choice_dialog.setText(f"How would you like to connect layer '{layer.name()}' to MapHub?")
-        upload_button = choice_dialog.addButton("Upload as New Map", QMessageBox.ActionRole)
-        connect_button = choice_dialog.addButton("Connect to Existing Map", QMessageBox.ActionRole)
-        cancel_button = choice_dialog.addButton(QMessageBox.Cancel)
-        
-        choice_dialog.exec_()
-        
-        if choice_dialog.clickedButton() == upload_button:
-            # Open the UploadMapDialog with pre-selected layer
-            upload_dialog = UploadMapDialog(self.iface, self)
-            upload_dialog.layerComboBox.setCurrentText(layer.name())
-            upload_dialog.exec_()
-            
-            # Refresh the dialog after upload
-            self.populate_layers()
-        elif choice_dialog.clickedButton() == connect_button:
-            # Open a dialog to select an existing map
-            # This would need to be implemented as a new dialog
-            QMessageBox.information(
-                self,
-                "Feature Coming Soon",
-                "The 'Connect to Existing Map' feature will be implemented in a future version."
-            )
-    
+
     def on_sync_clicked(self):
         """Handle click on the Synchronize Selected button."""
         # Get selected layers with their synchronization directions

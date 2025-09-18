@@ -83,7 +83,13 @@ class MapHubSyncManager:
         # Check if local file exists
         local_path = get_maphub_download_location(layer)
         if not local_path or not os.path.exists(local_path):
-            return "file_missing"
+            layer_path = layer.source()
+            if '|' in layer_path:  # Handle layers with query parameters
+                layer_path = layer_path.split('|')[0]
+            if os.path.exists(layer_path):
+                local_path = layer_path
+            else:
+                return "file_missing"
         
         # Check if local file is modified
         last_sync = layer.customProperty("maphub/last_sync")
@@ -116,11 +122,6 @@ class MapHubSyncManager:
         except Exception as e:
             print(f"Error checking remote status: {e}")
             return "remote_error"
-
-        # Check if local file exists
-        local_path = get_maphub_download_location(layer)
-        if not local_path or not os.path.exists(local_path):
-            return "file_missing"
         
         # Check if styles differ
         # Calculate the current style hash on demand from the local layer
@@ -218,7 +219,7 @@ class MapHubSyncManager:
 
         # Transfer MapHub properties using the stored values
         for key, value in layer_properties.items():
-            if key not in ["maphub/last_version_id", "maphub/last_sync", "maphub/last_style_hash"]:
+            if key not in ["maphub/last_sync", "maphub/last_style_hash"]:
                 layer.setCustomProperty(key, value)
 
         # Store the remote style hash for future comparison
@@ -662,6 +663,7 @@ class MapHubSyncManager:
 
         if version_id:
             layer.setCustomProperty("maphub/last_version_id", str(version_id))
+            print("Version set", layer.customProperty("maphub/last_version_id"))
         else:
             # Store initial version ID for future comparison
             try:

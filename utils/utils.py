@@ -48,15 +48,23 @@ def get_default_download_location():
         # If no user setting, use Documents/MapHub as default
         documents_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
         default_location = str(Path(documents_path) / "MapHub")
+        settings.setValue("MapHubPlugin/default_download_location", default_location)
     
     # Ensure the directory exists
     Path(default_location).mkdir(parents=True, exist_ok=True)
     
-    return Path(default_location)
+    return default_location
 
 def get_maphub_download_location(layer):
     map_id = layer.customProperty("maphub/map_id")
-    last_synced_version_id = layer.customProperty("maphub/last_version_id")
+
+    version_id = layer.customProperty("maphub/last_version_id")
+
+    if not version_id:
+        map_data = get_maphub_client().maps.get_map(map_id)['map']
+
+        version_id = map_data["latest_version_id"]
+
 
     if isinstance(layer, QgsVectorLayer):
         file_extension = '.fgb'  # Default to FlatGeobuf
@@ -65,7 +73,7 @@ def get_maphub_download_location(layer):
     else:
         raise Exception("Unsupported layer type.")
 
-    return Path(os.path.join(get_default_download_location(), f"{map_id}_{last_synced_version_id}{file_extension}"))
+    return os.path.join(get_default_download_location(), f"{map_id}_{version_id}{file_extension}")
 
 
 def get_layer_styles_as_json(layer, visuals: Dict[str, Any]) -> Dict[str, Any]:

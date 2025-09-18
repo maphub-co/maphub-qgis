@@ -401,13 +401,9 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         
         # Get default download location
         default_dir = get_default_download_location()
-        
-        # Create safe filename from map name
-        safe_name = ''.join(c for c in map_data.get('name', 'map') if c.isalnum() or c in ' _-')
-        safe_name = safe_name.replace(' ', '_')
-        
+
         # Create full file path
-        file_path = os.path.join(str(default_dir), f"{safe_name}{file_extension}")
+        file_path = os.path.join(str(default_dir), f"{map_data.get("id")}_{map_data["latest_version_id"]}{file_extension}")
         
         # Ensure filename is unique
         counter = 1
