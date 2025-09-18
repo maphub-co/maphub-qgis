@@ -2,6 +2,7 @@ import os.path
 import tempfile
 
 from qgis._core import QgsProject
+from qgis.core import Qgis
 
 from .utils import get_maphub_client, get_default_download_location
 
@@ -82,7 +83,9 @@ def load_maphub_project(folder_id):
 
     # Load the project into QGIS
     project = QgsProject.instance()
-    project.read(project_path)
+    readflags = Qgis.ProjectReadFlags()
+    readflags |= Qgis.ProjectReadFlag.DontResolveLayers
+    project.read(project_path, readflags)
 
     # Apply custom properties
     project.writeEntry("maphub", "folder_id", folder_id)

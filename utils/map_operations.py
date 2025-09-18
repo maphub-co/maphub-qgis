@@ -5,11 +5,12 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 
 from PyQt5.QtWidgets import QFileDialog, QMessageBox, QProgressBar, QLabel, QVBoxLayout, QDialog, QApplication
+from qgis._core import QgsVectorLayer
 from qgis.core import QgsProject, QgsVectorTileLayer, QgsRasterLayer
 from qgis.utils import iface
 
 # from .. import utils
-from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position, get_default_download_location
+from .utils import get_maphub_client, apply_style_to_layer, place_layer_at_position, get_default_download_location, layer_position
 from .sync_manager import MapHubSyncManager
 from .project_utils import load_maphub_project
 
@@ -364,8 +365,7 @@ def load_and_sync_folder(folder_id: str, iface, parent=None) -> None:
     
     for i, layer in enumerate(connected_layers):
         try:
-            # Synchronize the layer (auto direction will determine the appropriate action)
-            sync_manager.synchronize_layer(layer, direction="auto")
+            fix_missing_data_maphub_layer(layer)
             success_count += 1
         except Exception as e:
             errors.append(f"Error synchronizing layer {layer.name()}: {str(e)}")
@@ -391,3 +391,78 @@ def load_and_sync_folder(folder_id: str, iface, parent=None) -> None:
             "Synchronization Complete",
             f"Project loaded successfully. {success_count} layers synchronized."
         )
+
+
+def fix_missing_data_maphub_layer(layer):
+    sync_manager = MapHubSyncManager(iface)
+    status = sync_manager.get_layer_sync_status(layer)
+
+    if status != "file_missing":
+        return
+
+    map_id = layer.customProperty("maphub/map_id")
+
+    # Get map info to retrieve the latest version ID
+    map_info = get_maphub_client().maps.get_map(map_id)['map']
+    version_id = map_info.get('latest_version_id')
+
+    # Get default download location
+    default_dir = get_default_download_location()
+
+    # Determine file extension based on layer type
+    if isinstance(layer, QgsVectorLayer):
+        file_extension = '.fgb'  # Default to FlatGeobuf
+    elif isinstance(layer, QgsRasterLayer):
+        file_extension = '.tif'  # Default to GeoTIFF
+    else:
+        file_extension = '.fgb'  # Default fallback
+
+    # Create new file path with map_id and version_id
+    new_path = os.path.join(str(default_dir), f"{map_id}_{version_id}{file_extension}")
+
+    # Download the file
+    if not os.path.exists(new_path):
+        get_maphub_client().versions.download_version(version_id, new_path, file_extension.replace('.', ''))
+
+    # Store the layer name and custom properties
+    layer_name = layer.name()
+    layer_properties = {key: layer.customProperty(key) for key in layer.customProperties().keys()}
+
+    # Get layer position for later placement
+    project = QgsProject.instance()
+    layer_pos = layer_position(project, layer)
+
+    # Create a new layer with the downloaded file but don't add it to the project yet
+    if isinstance(layer, QgsVectorLayer):
+        new_layer = QgsVectorLayer(new_path, layer_name, "ogr")
+    elif isinstance(layer, QgsRasterLayer):
+        new_layer = QgsRasterLayer(new_path, layer_name)
+    else:
+        sync_manager.show_error(f"Unsupported layer type for '{layer_name}'")
+        return
+
+    if not new_layer or not new_layer.isValid():
+        sync_manager.show_error(f"Failed to create layer from {new_path}")
+        return
+
+    # Transfer custom properties to the new layer
+    for key, value in layer_properties.items():
+        if key != "maphub/local_path":  # Update local_path with the new path
+            new_layer.setCustomProperty(key, value)
+
+    # Update the new layer's properties
+    new_layer.setCustomProperty("maphub/local_path", new_path)
+    new_layer.setCustomProperty("maphub/last_version_id", version_id)
+    # new_layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
+
+    # Apply the style from MapHub
+    sync_manager._pull_and_apply_style(new_layer, map_id)
+
+    # Remove the old layer
+    QgsProject.instance().removeMapLayer(layer.id())
+    
+    # Add the new layer to the project at the same position as the old layer
+    place_layer_at_position(project, new_layer, layer_pos)
+
+    iface.messageBar().pushSuccess("MapHub", f"Missing file for layer '{layer_name}' successfully downloaded from MapHub.")
+    return
