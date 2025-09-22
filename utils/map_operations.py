@@ -398,7 +398,7 @@ def fix_missing_data_maphub_layer(layer):
     sync_manager = MapHubSyncManager(iface)
     status = sync_manager.get_layer_sync_status(layer)
 
-    if status != "file_missing":
+    if status != "file_missing" and layer.isValid():
         return
 
     map_id = layer.customProperty("maphub/map_id")
