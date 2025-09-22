@@ -83,13 +83,7 @@ class MapHubSyncManager:
         # Check if local file exists
         local_path = get_maphub_download_location(layer)
         if not local_path or not os.path.exists(local_path):
-            layer_path = layer.source()
-            if '|' in layer_path:  # Handle layers with query parameters
-                layer_path = layer_path.split('|')[0]
-            if os.path.exists(layer_path):
-                local_path = layer_path
-            else:
-                return "file_missing"
+            return "file_missing"
         
         # Check if local file is modified
         last_sync = layer.customProperty("maphub/last_sync")
@@ -513,41 +507,67 @@ class MapHubSyncManager:
 
             # Connect the layer to the uploaded map
             if map_id:
-                # For database layers, store the temp file path as the local path
-                # This allows future synchronization to work with the exported file
-                if isinstance(layer, QgsVectorLayer) and not is_file_based:
-                    # Create a permanent copy of the temporary file in the default download location
-                    default_dir = get_default_download_location()
-                    permanent_path = os.path.join(str(default_dir), f"{map_name}_{version_id}{file_extension}")
-                    
-                    # Ensure filename is unique
-                    counter = 1
-                    base_name = os.path.splitext(permanent_path)[0]
-                    while os.path.exists(permanent_path):
-                        permanent_path = f"{base_name}_{counter}{file_extension}"
-                        counter += 1
-                    
-                    # Copy the temporary file to the permanent location
-                    with open(temp_file, 'rb') as src_file:
-                        with open(permanent_path, 'wb') as dst_file:
-                            dst_file.write(src_file.read())
-                    
-                    # Use the permanent path for connection
-                    local_path = permanent_path
-                else:
-                    # Get the layer's source path
-                    local_path = layer.source()
-                    if '|' in local_path:  # Handle layers with query parameters
-                        local_path = local_path.split('|')[0]
+                # Get default download location
+                default_dir = get_default_download_location()
 
-                # Connect the layer to MapHub
+                # Create a permanent copy of the file in the default download location
+                permanent_path = os.path.join(str(default_dir), f"{map_id}_{version_id}{file_extension}")
+
+                # Ensure filename is unique
+                counter = 1
+                base_name = os.path.splitext(permanent_path)[0]
+                while os.path.exists(permanent_path):
+                    permanent_path = f"{base_name}_{counter}{file_extension}"
+                    counter += 1
+
+                # Copy the temporary file to the permanent location
+                with open(temp_file, 'rb') as src_file:
+                    with open(permanent_path, 'wb') as dst_file:
+                        dst_file.write(src_file.read())
+
+                # For shapefiles, copy all related files
+                if file_extension.lower() == '.shp':
+                    temp_base_name = os.path.splitext(temp_file)[0]
+                    perm_base_name = os.path.splitext(permanent_path)[0]
+                    for ext in ['.dbf', '.shx', '.prj', '.qpj', '.cpg']:
+                        related_file = f"{temp_base_name}{ext}"
+                        if os.path.exists(related_file):
+                            with open(related_file, 'rb') as src_file:
+                                with open(f"{perm_base_name}{ext}", 'wb') as dst_file:
+                                    dst_file.write(src_file.read())
+
+                # Create a new layer with the permanent path
+                if isinstance(layer, QgsVectorLayer):
+                    new_layer = QgsVectorLayer(permanent_path, layer.name(), "ogr")
+                elif isinstance(layer, QgsRasterLayer):
+                    new_layer = QgsRasterLayer(permanent_path, layer.name())
+
+                style_dict = self.get_layer_style_as_dict(layer)
+                apply_style_to_layer(new_layer, style_dict)
+
+                if not new_layer or not new_layer.isValid():
+                    raise Exception(f"Failed to create layer from {permanent_path}")
+
+                # Transfer custom properties from the old layer to the new layer
+                for key in layer.customProperties().keys():
+                    new_layer.setCustomProperty(key, layer.customProperty(key))
+
+                # Connect the new layer to MapHub
                 self.connect_layer(
-                    layer,
+                    new_layer,
                     map_id,
                     folder_id,
-                    local_path,
+                    permanent_path,
                     version_id
                 )
+
+
+                # Remove the old layer and add the new one
+                QgsProject.instance().removeMapLayer(layer.id())
+
+                # Place the new layer at the same position as the old one
+                place_layer_at_position(project, new_layer, position)
+
 
     def download_map(self, map_id, version_id=None, path=None, file_format=None, layer_name=None, connect_layer=True):
         """
