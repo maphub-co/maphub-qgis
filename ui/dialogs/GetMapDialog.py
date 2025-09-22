@@ -403,7 +403,7 @@ class GetMapDialog(MapHubBaseDialog, FORM_CLASS):
         default_dir = get_default_download_location()
 
         # Create full file path
-        file_path = os.path.join(str(default_dir), f"{map_data.get("id")}_{map_data["latest_version_id"]}{file_extension}")
+        file_path = os.path.join(str(default_dir), f'{map_data.get("id")}_{map_data["latest_version_id"]}{file_extension}')
         
         # Ensure filename is unique
         counter = 1
