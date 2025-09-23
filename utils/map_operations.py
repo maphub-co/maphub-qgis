@@ -136,7 +136,7 @@ def add_folder_maps_as_tiling_services(folder_id: str, parent=None) -> Tuple[int
 
     # Sort maps based on order in visuals if available
     def get_order(map_data: dict):
-        return map_data.get('visuals', {}).get('layer_order', (float('inf'),))
+        return map_data.get('visuals', {}).get('layer_order', [float('inf')])
     maps.sort(key=get_order)
 
     # Add each map as a tiling service
@@ -240,7 +240,7 @@ def download_folder_maps(folder_id: str, parent=None, format_type: str = None) -
 
     # Sort maps based on order in visuals if available
     def get_order(map_data: dict):
-        return map_data.get('visuals', {}).get('layer_order', (float('inf'),))
+        return map_data.get('visuals', {}).get('layer_order', [float('inf')])
     maps.sort(key=get_order)
 
     # Download each map
