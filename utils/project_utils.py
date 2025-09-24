@@ -29,23 +29,7 @@ def folder_has_project(folder_id):
     Returns:
         bool: True if the folder has a project, False otherwise
     """
-    try:
-        # Create a temporary file path to download the project to
-        temp_file = tempfile.NamedTemporaryFile(suffix='.qgz', delete=True)
-        temp_file.close()  # Close the file so it can be written to
-
-        # Try to get the project - if it exists, this will succeed
-        get_maphub_client().folder.get_qgis_project(folder_id, temp_file.name)
-
-        # If we get here, the project exists
-        # Clean up the temporary file
-        import os
-        if os.path.exists(temp_file.name):
-            os.remove(temp_file.name)
-        return True
-    except Exception:
-        # If an exception is raised, the project doesn't exist
-        return False
+    return get_maphub_client().folder.get_is_project(folder_id)
 
 
 def save_project_to_maphub(folder_id):

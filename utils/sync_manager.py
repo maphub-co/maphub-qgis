@@ -443,13 +443,13 @@ class MapHubSyncManager:
             else:
                 raise Exception("Unsupported layer type.")
 
-            # Create a temporary file path
-            temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
-
             # Handle the layer based on its type and source
-            if isinstance(layer, QgsVectorLayer) and not is_file_based:
+            if isinstance(layer, QgsVectorLayer) and (not is_file_based or file_extension.lower() == '.gpkg'):
                 # For database layers (like PostGIS), export to file format
                 from qgis.core import QgsVectorFileWriter
+
+                file_extension = '.fgb'
+                temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
                 
                 # Export to FlatGeobuf format
                 error = QgsVectorFileWriter.writeAsVectorFormat(
@@ -463,6 +463,8 @@ class MapHubSyncManager:
                 if error[0] != QgsVectorFileWriter.NoError:
                     raise Exception(f"Error exporting layer: {error[0]}")
             elif is_file_based:
+                temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
+
                 # For file-based layers, copy the file
                 with open(layer_path, 'rb') as src_file:
                     with open(temp_file, 'wb') as dst_file:
