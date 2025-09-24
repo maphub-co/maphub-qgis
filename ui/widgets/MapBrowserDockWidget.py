@@ -67,6 +67,25 @@ class FolderContentLoader(QThread):
             self.error_occurred.emit(str(e))
 
 
+class FolderProjectStatusLoader(QThread):
+    """Thread for loading folder project status."""
+    status_loaded = pyqtSignal(object, bool)  # folder_item, is_project
+    error_occurred = pyqtSignal(str)  # error message
+
+    def __init__(self, folder_item, folder_id):
+        super().__init__()
+        self.folder_item = folder_item
+        self.folder_id = folder_id
+
+    def run(self):
+        try:
+            client = get_maphub_client()
+            is_project = client.folder.get_is_project(self.folder_id)
+            self.status_loaded.emit(self.folder_item, is_project)
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+
+
 class MapBrowserTreeWidget(QTreeWidget):
     """Custom QTreeWidget with drag and drop support for maps and folders."""
     
@@ -438,7 +457,15 @@ class MapBrowserDockWidget(QDockWidget):
                 folder_item = QTreeWidgetItem(parent_item)
                 folder_item.setText(0, folder_name)
                 folder_item.setData(0, Qt.UserRole, {'type': 'folder', 'id': folder_id, 'data': folder})
+                # Set default folder icon
                 folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'folder.svg')))
+                
+                # Start a loader to get the project status
+                loader = FolderProjectStatusLoader(folder_item, folder_id)
+                loader.status_loaded.connect(self.on_folder_project_status_loaded)
+                loader.error_occurred.connect(self.on_content_error)
+                self.content_loaders.append(loader)
+                loader.start()
 
                 # Add placeholder for expandable folders
                 placeholder = QTreeWidgetItem(folder_item)
@@ -560,6 +587,22 @@ class MapBrowserDockWidget(QDockWidget):
         else:
             # For other errors, show the error message
             QMessageBox.critical(self, "Error Loading Content", f"An error occurred while loading content: {error_message}")
+            
+    def on_folder_project_status_loaded(self, folder_item, is_project):
+        """Handle folder project status loaded signal."""
+        # Remove the loader thread from the list
+        for loader in self.content_loaders[:]:
+            if not loader.isRunning():
+                self.content_loaders.remove(loader)
+
+        # Update the folder icon based on project status
+        if is_project:
+            if folder_item.data(0, Qt.UserRole)['id'] == get_project_folder_id():
+                folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'project_active.svg')))
+            else:
+                folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'project.svg')))
+        else:
+            folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'folder.svg')))
 
     def show_context_menu(self, position):
         """Show context menu for the selected item."""

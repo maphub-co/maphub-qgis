@@ -79,3 +79,6 @@ class FolderEndpoint(BaseEndpoint):
     def put_qgis_project(self, folder_id: uuid.UUID, local_path: str) -> None:
         with open(local_path, "rb") as f:
             self._make_request("PUT", f"/folders/{folder_id}/project.qgz", files={"file": f})
+
+    def get_is_project(self, folder_id: uuid.UUID) -> bool:
+        return self._make_request("GET", f"/folders/{folder_id}/is_project").json()
