@@ -67,6 +67,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Populate the tree with all layers
         self.populate_layers()
 
+        self.on_select_all_clicked()
+
     def _collect_folder_id(self) -> str:
         # Get folder_id from project
         folder_id = get_project_folder_id()
