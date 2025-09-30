@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsVectorFileWriter, QgsCoordinateTransformContext
 
 from ..maphub.exceptions import APIException
 from .utils import get_maphub_client, apply_style_to_layer, get_layer_styles_as_json, get_default_download_location, \
@@ -258,6 +259,8 @@ class MapHubSyncManager:
             elif status == "processing":
                 self.show_error("This map is still being processed by MapHub. Please try again later.")
                 return
+            elif status == "file_missing":
+                direction = "pull"
             elif status == "style_changed_local":
                 direction = "push"  # Local changes take precedence
             elif status == "style_changed_remote":
@@ -446,22 +449,56 @@ class MapHubSyncManager:
             # Handle the layer based on its type and source
             if isinstance(layer, QgsVectorLayer) and (not is_file_based or file_extension.lower() == '.gpkg'):
                 # For database layers (like PostGIS), export to file format
-                from qgis.core import QgsVectorFileWriter
 
+                # Always use FlatGeobuf as requested
                 file_extension = '.fgb'
                 temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
-                
-                # Export to FlatGeobuf format
-                error = QgsVectorFileWriter.writeAsVectorFormat(
+
+                # Create a list of field indices to include (excluding problematic ones)
+                fields = layer.fields()
+                valid_indices = []
+                skipped_fields = []
+
+                for i in range(fields.count()):
+                    field = fields.at(i)
+                    # Check if the field is a QVariantList type or other problematic type
+                    if "JSON" not in field.typeName():
+                        valid_indices.append(i)
+                        print(f"Including field {field.name()} with type {field.typeName()}")
+                    else:
+                        skipped_fields.append(field.name())
+                        print(f"Skipping field {field.name()} with type {field.typeName()}")
+
+                # Step 1: Export to GeoPackage first (with field filtering)
+                options = QgsVectorFileWriter.SaveVectorOptions()
+                options.driverName = "FlatGeobuf"
+                options.layerName = layer.name()
+                options.fileEncoding = "UTF-8"
+                options.attributes = valid_indices  # Only include valid fields
+
+                transform_context = QgsCoordinateTransformContext()
+
+                error = QgsVectorFileWriter.writeAsVectorFormatV3(
                     layer,
                     temp_file,
-                    "UTF-8",
-                    layer.crs(),
-                    "FlatGeobuf"
+                    transform_context,
+                    options
                 )
-                
+
                 if error[0] != QgsVectorFileWriter.NoError:
-                    raise Exception(f"Error exporting layer: {error[0]}")
+                    raise Exception(f"Error exporting filtered layer to FlatGeobuf: {error}")
+
+                # Log which fields were skipped
+                if skipped_fields:
+                    skipped_fields_str = ', '.join(skipped_fields)
+                    print(f"Skipped problematic fields: {skipped_fields_str}")
+                    # Add a message to the QGIS message bar if interface is available
+                    if self.iface:
+                        self.iface.messageBar().pushWarning(
+                            "MapHub",
+                            f"Some fields were excluded during export due to compatibility issues: {skipped_fields_str}"
+                        )
+
             elif is_file_based:
                 temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
 
