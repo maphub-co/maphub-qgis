@@ -447,7 +447,7 @@ class MapHubSyncManager:
                 raise Exception("Unsupported layer type.")
 
             # Handle the layer based on its type and source
-            if isinstance(layer, QgsVectorLayer) and (not is_file_based or file_extension.lower() == '.gpkg'):
+            if isinstance(layer, QgsVectorLayer) and (not is_file_based or file_extension.lower() in ['.gpkg', '.gdb']):
                 # For database layers (like PostGIS), export to file format
 
                 # Always use FlatGeobuf as requested

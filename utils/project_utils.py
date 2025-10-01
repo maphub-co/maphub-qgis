@@ -41,14 +41,11 @@ def save_project_to_maphub(folder_id):
 
     # Check if the project has been saved
     if project.fileName() == "":
-        # Create a temporary file to save the project
-        temp_file = tempfile.NamedTemporaryFile(suffix=".qgz", delete=False)
-        temp_file.close()
-        temp_path = temp_file.name
+        base_folder = get_default_download_location()
+        local_path = os.path.join(base_folder, f"{folder_id}.qgz")
 
         # Save the project to the temporary file
-        project.write(temp_path)
-        local_path = temp_path
+        project.write(local_path)
     else:
         # Save the project to its current location
         local_path = project.fileName()
