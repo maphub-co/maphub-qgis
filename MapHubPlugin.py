@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-
+import asyncio
 import os
 import os.path
 
+import qasync
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt, QEvent, QDataStream, QIODevice, QObject
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
