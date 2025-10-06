@@ -39,6 +39,10 @@ def save_project_to_maphub(folder_id):
     # Get the current project
     project = QgsProject.instance()
 
+    # Set the project title to the folder name.
+    folder_info = get_maphub_client().folder.get_folder(folder_id)["folder"]
+    project.setTitle(folder_info['name'])
+
     # Check if the project has been saved
     if project.fileName() == "":
         base_folder = get_default_download_location()
@@ -67,6 +71,10 @@ def load_maphub_project(folder_id):
     readflags = Qgis.ProjectReadFlags()
     readflags |= Qgis.ProjectReadFlag.DontResolveLayers
     project.read(project_path, readflags)
+
+    # Set the project title to the folder name.
+    folder_info = get_maphub_client().folder.get_folder(folder_id)["folder"]
+    project.setTitle(folder_info['name'])
 
     # Apply custom properties
     project.writeEntry("maphub", "folder_id", folder_id)
