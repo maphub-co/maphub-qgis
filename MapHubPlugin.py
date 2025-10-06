@@ -256,7 +256,7 @@ class MapHubPlugin(QObject):
         self.initialize_status_update_scheduler()
         
         # Update layer icons
-        self.layer_decorator.update_layer_icons()
+        self.refresh_status()
         
         # Connect to project events to update layer icons
         QgsProject.instance().layersAdded.connect(self.on_layers_changed)
@@ -427,7 +427,7 @@ class MapHubPlugin(QObject):
         """Refresh all MapHub status icons and browser items."""
         # Update layer icons in the layers panel
         if self.layer_decorator:
-            self.layer_decorator.update_layer_icons()
+            asyncio.create_task(self.layer_decorator.update_layer_icons())
 
         # Update browser dock if available
         if self.map_browser_dock:

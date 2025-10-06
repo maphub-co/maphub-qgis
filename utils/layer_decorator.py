@@ -1,3 +1,4 @@
+import asyncio
 import os
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
@@ -55,110 +56,75 @@ class MapHubLayerDecorator:
 
         # Cache for status icons
         self._status_icons = {}
-        
+
         # Dictionary to track registered indicators
         self._indicators = {}
 
-    def update_layer_icons(self):
+        self.sync_manager = MapHubSyncManager(self.iface)
+
+    async def update_layer_icons(self):
         """Update layer icons with MapHub status indicators"""
+        layers = self.sync_manager.get_connected_layers()
+
+        tasks = []
+        for layer in layers:
+            task = self.update_layer_icon(layer)
+            tasks.append(task)
+
+        if tasks:
+            return await asyncio.gather(*tasks)
+
+        return None
+
+    async def update_layer_icon(self, layer):
+        """Update a layer icon with MapHub status indicators"""
         # Get the layer tree view from the interface
         layer_tree_view = self.iface.layerTreeView()
         if not layer_tree_view:
             return
-            
-        # Clear existing indicators - use the cleanup method to ensure thorough removal
-        self.cleanup()
-        
-        # Process all layers
+
+        # Find the layer node in the layer tree
         root = QgsProject.instance().layerTreeRoot()
-        self._process_tree_node(root, layer_tree_view)
+        node = root.findLayer(layer.id())
 
-    def _process_tree_node(self, node, layer_tree_view):
-        """
-        Process a layer tree node and its children.
+        if not node:
+            return  # Layer not found in tree
 
-        Args:
-            node: The layer tree node
-            layer_tree_view: The QGIS layer tree view
-        """
-        if node.nodeType() == QgsLayerTreeNode.NodeLayer:
-            layer = node.layer()
-            if layer and self._is_maphub_layer(layer):
-                self._update_layer_indicator(layer, node, layer_tree_view)
-        else:
-            for child in node.children():
-                self._process_tree_node(child, layer_tree_view)
-                
-    def _is_maphub_layer(self, layer):
-        """
-        Check if a layer is connected to MapHub.
-        
-        Args:
-            layer: The QGIS layer
-            
-        Returns:
-            bool: True if the layer is connected to MapHub, False otherwise
-        """
-        return layer.customProperty("maphub/map_id") is not None
-        
-    def _update_layer_indicator(self, layer, node, layer_tree_view):
-        """
-        Add an indicator to a layer in the layer tree view.
-        
-        Args:
-            layer: The QGIS layer
-            node: The layer tree node
-            layer_tree_view: The QGIS layer tree view
-        """
+        # Remove existing indicator for this layer if it exists
+        self.cleanup_layer(layer)
+
         # Get synchronization status (on demand)
-        status = self.sync_manager.get_layer_sync_status(layer)
-        
+        status = await asyncio.to_thread(self.sync_manager.get_layer_sync_status, layer)
+
         # Store the status in the layer's custom properties for potential use elsewhere
         layer.setCustomProperty("maphub/sync_status", status)
 
-        # Create a unique ID for this layer's indicator (consistent regardless of status)
-        indicator_id = f"maphub_{layer.id()}"
-        
-        # Create indicator
-        indicator = QgsLayerTreeViewIndicator(layer_tree_view)
-        
         # Get icon for status
         icon = self._get_status_icon(status)
-        
+        tooltip = self._get_status_tooltip(status)
+
+        # Create indicator
+        indicator = QgsLayerTreeViewIndicator(layer_tree_view)
         if icon:
             # Use status-specific icon and tooltip
             indicator.setIcon(icon)
-            
-            # Set tooltip based on status
-            if status == "local_modified":
-                indicator.setToolTip("Local changes need to be uploaded to MapHub")
-            elif status == "remote_newer":
-                indicator.setToolTip("Remote changes need to be downloaded from MapHub")
-            elif status == "style_changed_local":
-                indicator.setToolTip("Local style changes need to be uploaded to MapHub")
-            elif status == "style_changed_remote":
-                indicator.setToolTip("Remote style changes need to be downloaded from MapHub")
-            elif status == "style_changed_both":
-                indicator.setToolTip("Style conflict - both local and remote styles have changed")
-            elif status == "file_missing":
-                indicator.setToolTip("Local file is missing")
-            elif status == "remote_error":
-                indicator.setToolTip("Error checking remote status")
-            elif status == "processing":
-                indicator.setToolTip("Map is being processed on MapHub")
+            if tooltip:
+                indicator.setToolTip(tooltip)
         else:
             # Use chain icon for connected layers with no specific status
             chain_icon_path = os.path.join(self.icon_dir, 'chain.svg')
             chain_icon = QIcon(chain_icon_path)
             indicator.setIcon(chain_icon)
             indicator.setToolTip("Layer is connected to MapHub")
-        
+
         # Add the indicator to the layer
         layer_tree_view.addIndicator(node, indicator)
-        
+
+        # Create a unique ID for this layer's indicator (consistent regardless of status)
+        indicator_id = f"maphub_{layer.id()}"
+
         # Store the indicator for later removal
         self._indicators[indicator_id] = (node, indicator)
-
 
     def cleanup(self):
         """
@@ -182,7 +148,30 @@ class MapHubLayerDecorator:
 
         # Clear the indicators dictionary
         self._indicators.clear()
-    
+
+    def cleanup_layer(self, layer):
+        layer_tree_view = self.iface.layerTreeView()
+        if not layer_tree_view:
+            return
+
+        indicator_id = f"maphub_{layer.id()}"
+
+        if indicator_id not in self._indicators:
+            return
+
+        node, indicator = self._indicators[indicator_id]
+
+        try:
+            layer_tree_view.removeIndicator(node, indicator)
+        except RuntimeError:
+            # Node has been deleted, skip it
+            pass
+        except Exception:
+            # Handle any other exceptions
+            pass
+
+        del self._indicators[indicator_id]
+
     def _get_status_icon(self, status):
         """
         Get an icon for a synchronization status.
@@ -223,5 +212,23 @@ class MapHubLayerDecorator:
             return icon
             
         return None
-        
 
+    def _get_status_tooltip(self, status) -> str:
+        if status == "local_modified":
+            return "Local changes need to be uploaded to MapHub"
+        elif status == "remote_newer":
+            return "Remote changes need to be downloaded from MapHub"
+        elif status == "style_changed_local":
+            return "Local style changes need to be uploaded to MapHub"
+        elif status == "style_changed_remote":
+            return "Remote style changes need to be downloaded from MapHub"
+        elif status == "style_changed_both":
+            return "Style conflict - both local and remote styles have changed"
+        elif status == "file_missing":
+            return "Local file is missing"
+        elif status == "remote_error":
+            return "Error checking remote status"
+        elif status == "processing":
+            return "Map is being processed on MapHub"
+        else:
+            return None

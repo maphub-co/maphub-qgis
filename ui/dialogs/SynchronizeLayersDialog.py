@@ -1,3 +1,4 @@
+import asyncio
 import os
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
@@ -155,7 +156,9 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Update layer icons - use the existing decorator from the plugin instance
         from qgis.utils import plugins
         if 'MapHubPlugin' in plugins:
-            plugins['MapHubPlugin'].layer_decorator.update_layer_icons()
+            asyncio.create_task(plugins['MapHubPlugin'].layer_decorator.update_layer_icons())
+
+
         
         # Clear and rebuild the folder name label
         # First, remove the existing layout at index 0
@@ -328,7 +331,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Update layer icons - use the existing decorator from the plugin instance
         # This prevents creating multiple decorators that might add duplicate indicators
         layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
-        layer_decorator.update_layer_icons()
+        asyncio.create_task(layer_decorator.update_layer_icons())
         
         # Define group headers with colors
         groups = [
@@ -599,7 +602,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Update layer icons - use the existing decorator from the plugin instance
         # This prevents creating multiple decorators that might add duplicate indicators
         layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
-        layer_decorator.update_layer_icons()
+        asyncio.create_task(layer_decorator.update_layer_icons())
         
         # Show success message
         if connect_count > 0 and success_count > 0:
