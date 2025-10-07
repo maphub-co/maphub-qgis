@@ -163,7 +163,7 @@ class MapHubPlugin(QObject):
             text=self.tr(u'Get map'),
             callback=self.get_map,
             parent=self.iface.mainWindow(),
-            add_to_toolbar=True
+            add_to_toolbar=False
         )
 
         # self.add_action(
