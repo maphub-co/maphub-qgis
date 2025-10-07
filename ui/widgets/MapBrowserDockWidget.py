@@ -606,7 +606,8 @@ class MapBrowserDockWidget(QDockWidget):
                 delay += 50  # Stagger child expansions to avoid conflicts
 
         # Sort folder contents alphabetically
-        parent_item.treeWidget().sortItems(0, Qt.AscendingOrder)
+        if parent_item.treeWidget() is not None:
+            parent_item.treeWidget().sortItems(0, Qt.AscendingOrder)
 
     def on_content_error(self, error_message):
         """Handle content loading error."""
