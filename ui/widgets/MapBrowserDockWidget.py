@@ -86,6 +86,51 @@ class FolderProjectStatusLoader(QThread):
             self.error_occurred.emit(str(e))
 
 
+class SortableTreeWidgetItem(QTreeWidgetItem):
+    """
+    Custom QTreeWidgetItem that sorts folders before maps.
+    
+    This class overrides the __lt__ method to ensure that:
+    1. Folders always appear before maps
+    2. Folders are sorted alphabetically among themselves
+    3. Maps are sorted alphabetically among themselves
+    """
+    
+    def __lt__(self, other):
+        # Get the column being sorted
+        column = self.treeWidget().sortColumn()
+        
+        # Get item data
+        item_data = self.data(0, Qt.UserRole)
+        other_data = other.data(0, Qt.UserRole)
+        
+        # Handle case where data might be None
+        if not item_data or not other_data:
+            return super(SortableTreeWidgetItem, self).__lt__(other)
+            
+        # Get item types
+        item_type = item_data.get('type', '')
+        other_type = other_data.get('type', '')
+        
+        # Special case for placeholders (loading items)
+        if item_type == 'placeholder' or other_type == 'placeholder':
+            return super(SortableTreeWidgetItem, self).__lt__(other)
+        
+        # If both items are the same type (both folders or both maps),
+        # sort them alphabetically by name
+        if item_type == other_type:
+            return self.text(column).lower() < other.text(column).lower()
+            
+        # If types are different, folders always come before maps
+        if item_type == 'folder' and other_type == 'map':
+            return True
+        if item_type == 'map' and other_type == 'folder':
+            return False
+            
+        # Default to standard sorting for other cases
+        return super(SortableTreeWidgetItem, self).__lt__(other)
+
+
 class MapBrowserTreeWidget(QTreeWidget):
     """Custom QTreeWidget with drag and drop support for maps and folders."""
     
@@ -97,6 +142,11 @@ class MapBrowserTreeWidget(QTreeWidget):
         self.setDragEnabled(True)
         self.setDragDropMode(QTreeWidget.DragOnly)
         self.icon_dir = icon_dir
+
+        # Enable sorting
+        self.setSortingEnabled(True)
+        # Set default sort order to ascending (alphabetical)
+        self.header().setSortIndicator(0, Qt.AscendingOrder)
     
     def startDrag(self, supportedActions):
         """Override startDrag to customize drag behavior."""
@@ -168,7 +218,7 @@ class MapBrowserDockWidget(QDockWidget):
         self.iface = iface
         self.refresh_callback = refresh_callback
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        
+
         # Set up logging
         self.logger = logging.getLogger('MapHubPlugin.BrowserDock')
         self.logger.setLevel(logging.DEBUG)
@@ -255,7 +305,7 @@ class MapBrowserDockWidget(QDockWidget):
         self.tree_widget.clear()
 
         # Create a loading indicator as the only item
-        loading_item = QTreeWidgetItem(self.tree_widget)
+        loading_item = SortableTreeWidgetItem(self.tree_widget)
         loading_item.setText(0, "Loading workspaces... Please wait")
 
         # Load workspaces in a background thread
@@ -281,7 +331,7 @@ class MapBrowserDockWidget(QDockWidget):
             workspace_name = workspace.get('name', 'Unknown Workspace')
 
             # Create workspace item
-            workspace_item = QTreeWidgetItem(self.tree_widget)
+            workspace_item = SortableTreeWidgetItem(self.tree_widget)
             workspace_item.setText(0, workspace_name)
             workspace_item.setData(0, Qt.UserRole, {'type': 'workspace', 'id': workspace_id})
 
@@ -289,9 +339,12 @@ class MapBrowserDockWidget(QDockWidget):
             workspace_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'workspace.svg')))
 
             # Add a placeholder child to show the expand arrow
-            placeholder = QTreeWidgetItem(workspace_item)
+            placeholder = SortableTreeWidgetItem(workspace_item)
             placeholder.setText(0, "Loading...")
             placeholder.setData(0, Qt.UserRole, {'type': 'placeholder'})
+
+        # Sort workspaces alphabetically
+        self.tree_widget.sortItems(0, Qt.AscendingOrder)
 
     def on_item_expanded(self, item):
         """Handle item expansion to load children on demand."""
@@ -454,7 +507,7 @@ class MapBrowserDockWidget(QDockWidget):
             folder_name = folder.get('name', 'Unnamed Folder')
             
             if folder_id not in existing_folder_ids:
-                folder_item = QTreeWidgetItem(parent_item)
+                folder_item = SortableTreeWidgetItem(parent_item)
                 folder_item.setText(0, folder_name)
                 folder_item.setData(0, Qt.UserRole, {'type': 'folder', 'id': folder_id, 'data': folder})
                 # Set default folder icon
@@ -468,7 +521,7 @@ class MapBrowserDockWidget(QDockWidget):
                 loader.start()
 
                 # Add placeholder for expandable folders
-                placeholder = QTreeWidgetItem(folder_item)
+                placeholder = SortableTreeWidgetItem(folder_item)
                 placeholder.setText(0, "Loading...")
                 placeholder.setData(0, Qt.UserRole, {'type': 'placeholder'})
                 
@@ -504,7 +557,7 @@ class MapBrowserDockWidget(QDockWidget):
         for map_data in maps:
             map_id = map_data.get('id')
             if map_id not in existing_map_ids:
-                map_item = QTreeWidgetItem(parent_item)
+                map_item = SortableTreeWidgetItem(parent_item)
                 map_item.setText(0, map_data.get('name', 'Unnamed Map'))
                 map_item.setData(0, Qt.UserRole, {'type': 'map', 'id': map_id, 'data': map_data})
 
@@ -551,6 +604,9 @@ class MapBrowserDockWidget(QDockWidget):
                 self.logger.debug(f"  - Scheduling delayed expansion for child folder '{folder_name}'")
                 QTimer.singleShot(delay, lambda p=folder_item, t=folder_name: self._delayed_expand(p, t))
                 delay += 50  # Stagger child expansions to avoid conflicts
+
+        # Sort folder contents alphabetically
+        parent_item.treeWidget().sortItems(0, Qt.AscendingOrder)
 
     def on_content_error(self, error_message):
         """Handle content loading error."""
@@ -1153,7 +1209,7 @@ class MapBrowserDockWidget(QDockWidget):
                     
                     # Add a placeholder if there isn't one
                     if child.childCount() == 0:
-                        placeholder = QTreeWidgetItem(child)
+                        placeholder = SortableTreeWidgetItem(child)
                         placeholder.setText(0, "Loading...")
                         placeholder.setData(0, Qt.UserRole, {'type': 'placeholder'})
                     
@@ -1242,7 +1298,7 @@ class MapBrowserDockWidget(QDockWidget):
                 
                 # Add a placeholder if there isn't one
                 if workspace_item.childCount() == 0:
-                    placeholder = QTreeWidgetItem(workspace_item)
+                    placeholder = SortableTreeWidgetItem(workspace_item)
                     placeholder.setText(0, "Loading...")
                     placeholder.setData(0, Qt.UserRole, {'type': 'placeholder'})
                 
