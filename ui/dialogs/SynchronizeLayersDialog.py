@@ -1,7 +1,7 @@
 import asyncio
 import os
 from PyQt5.QtCore import Qt, QSize, QTimer
-from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QLabel, QPushButton, QHBoxLayout
+from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QLabel, QPushButton, QHBoxLayout, QFrame
 from PyQt5.QtGui import QBrush, QColor, QFont
 from qgis.PyQt import uic
 from qgis.core import QgsProject
@@ -10,9 +10,10 @@ from .MapHubBaseDialog import MapHubBaseDialog
 from .UploadMapDialog import UploadMapDialog
 from ...utils.sync_manager import MapHubSyncManager
 from ...utils.status_icon_manager import StatusIconManager
-from ...utils.project_utils import get_project_folder_id, save_project_to_maphub
+from ...utils.project_utils import get_project_folder_id, save_project_to_maphub, load_maphub_project
 from ...utils.utils import get_maphub_client
 from .SaveProjectDialog import SaveProjectDialog
+from .LoadProjectDialog import LoadProjectDialog
 from ..widgets.ProgressDialog import ProgressDialog
 from ...utils.error_manager import ErrorManager
 from ...utils.layer_decorator import MapHubLayerDecorator
@@ -45,10 +46,6 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
 
         self.folder_id = self._collect_folder_id()
 
-        if not self.folder_id:
-            QTimer.singleShot(0, self.reject)  # schedule reject right after show event
-            return
-        
         # Flag to determine if project should be saved on sync
         self.save_project_on_sync = True
 
@@ -68,31 +65,22 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         
         # Add folder name label at the top of the dialog
         self._add_folder_name_label()
-        
-        # Populate the tree with all layers
-        self.populate_layers()
+
+        if self.folder_id is not None:
+            self.populate_layers()
 
         self.on_select_all_clicked()
 
     def _collect_folder_id(self) -> str:
+        """
+        Get the folder_id from the project.
+        
+        Returns:
+            str: The folder ID, or None if not found
+        """
         # Get folder_id from project
         folder_id = get_project_folder_id()
-
-        if folder_id:
-            return folder_id
-
-        # Show the folder selection dialog
-        save_dialog = SaveProjectDialog(self)
-        result = save_dialog.exec_()
-
-        if result:
-            folder_id = save_dialog.get_selected_folder_id()
-            # Save the folder_id to the project
-            QgsProject.instance().writeEntry("maphub", "folder_id", folder_id)
-            return folder_id
-
-        else:
-            return None
+        return folder_id
             
     def _on_save_project_checkbox_changed(self, state):
         """
@@ -103,25 +91,163 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         """
         self.save_project_on_sync = state == Qt.Checked
         
-    def _on_change_folder_clicked(self):
+    def _clear_header_layouts(self, num_items=4):
         """
-        Handle click on the Change Folder button.
+        Clear the header layouts (folder name, separator, etc.) from the dialog.
+        
+        This method removes the first few items from the vertical layout,
+        handling both widgets and layouts appropriately.
+        
+        Args:
+            num_items: The number of items to remove (default: 4)
+        """
+        for i in range(min(num_items, self.verticalLayout.count())):
+            old_item = self.verticalLayout.itemAt(0)
+            if old_item:
+                # Check if it's a widget or a layout
+                if old_item.widget():
+                    # It's a widget, just remove and delete it
+                    widget = old_item.widget()
+                    self.verticalLayout.removeWidget(widget)
+                    widget.deleteLater()
+                elif old_item.layout():
+                    # It's a layout, remove all its widgets
+                    old_layout = old_item.layout()
+                    while old_layout.count():
+                        item = old_layout.takeAt(0)
+                        if item.widget():
+                            item.widget().deleteLater()
+                    # Remove the layout itself
+                    self.verticalLayout.removeItem(old_layout)
+
+    def _add_folder_name_label(self):
+        """
+        Add a label at the top of the dialog showing the folder name.
+        Also adds a "Change Folder" button to allow changing the project's folder.
+        If folder_id is None, shows a message and buttons to select a new folder or load an existing project.
+        
+        The top section always has the same maximum height regardless of folder_id status.
+        The "Save project on synchronize" checkbox is placed below the separator and only shown when a folder is detected.
+        """
+        # Create a horizontal layout for the folder section
+        folder_layout = QHBoxLayout()
+        folder_layout.setContentsMargins(10, 10, 10, 10)  # Add some padding
+        
+        if self.folder_id:
+            try:
+                # Get the folder information using the MapHub client
+                client = get_maphub_client()
+                folder_info = client.folder.get_folder(self.folder_id)
+                folder_name = folder_info['folder'].get('name', 'Unknown Folder')
+                
+                # Create a label with the folder name
+                folder_label = QLabel(f"Project Folder: {folder_name}")
+                
+                # Style the label to make it stand out
+                font = QFont()
+                font.setBold(True)
+                folder_label.setFont(font)
+                
+                # Add the label to the horizontal layout
+                folder_layout.addWidget(folder_label)
+                
+                # Add a spacer for consistent layout
+                folder_layout.addStretch()
+                
+            except Exception as e:
+                # If there's an error getting the folder name, just show "Unknown Folder"
+                folder_label = QLabel("Project Folder: Unknown")
+                font = QFont()
+                font.setBold(True)
+                folder_label.setFont(font)
+                folder_layout.addWidget(folder_label)
+
+                # Add a spacer for consistent layout
+                folder_layout.addStretch()
+                
+        else:
+            # No folder is set, show "Not Set" label
+            folder_label = QLabel("Project Folder: Not Set")
+            font = QFont()
+            font.setBold(True)
+            folder_label.setFont(font)
+            folder_layout.addWidget(folder_label)
+            
+            # Add spacers to maintain consistent layout width
+            folder_layout.addStretch()
+            
+            # Add invisible placeholder widgets to maintain consistent height
+            placeholder = QLabel("")
+            folder_layout.addWidget(placeholder)
+        
+        # Set a fixed height for the folder layout to ensure consistency
+        folder_frame = QFrame()
+        folder_frame.setLayout(folder_layout)
+        folder_frame.setMinimumHeight(50)  # Set minimum height
+        folder_frame.setMaximumHeight(50)  # Set maximum height
+        
+        # Insert the folder frame at the top of the dialog
+        self.verticalLayout.insertWidget(0, folder_frame)
+        
+        # Add a visual separator
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        self.verticalLayout.insertWidget(1, separator)
+        
+        # Add the "Save project on synchronize" checkbox below the separator, only if folder_id is not None
+        if self.folder_id:
+            save_checkbox_layout = QHBoxLayout()
+            
+            # Add a spacer to push the checkbox to the right
+            save_checkbox_layout.addStretch()
+            
+            # Create a checkbox for saving the project
+            save_project_checkbox = QCheckBox("Save project on synchronize")
+            save_project_checkbox.setChecked(self.save_project_on_sync)
+            save_project_checkbox.stateChanged.connect(self._on_save_project_checkbox_changed)
+            save_checkbox_layout.addWidget(save_project_checkbox)
+            
+            # Insert the checkbox layout below the separator
+            self.verticalLayout.insertLayout(2, save_checkbox_layout)
+        
+        # If folder_id is None, hide the tree widget and buttons and show the folder selection options
+        if not self.folder_id:
+            # Hide the tree widget and buttons
+            self.layersTree.hide()
+            self.selectAllButton.hide()
+            self.selectNoneButton.hide()
+            self.syncButton.hide()
+            
+            # Create a message label
+            message_layout = QHBoxLayout()
+            message_label = QLabel("Please select a project folder to continue")
+            message_label.setAlignment(Qt.AlignCenter)
+            message_layout.addWidget(message_label)
+            self.verticalLayout.insertLayout(2, message_layout)
+            
+            # Create buttons for folder selection
+            buttons_layout = QHBoxLayout()
+            
+            # New folder button
+            new_folder_button = QPushButton("Create New Project")
+            new_folder_button.clicked.connect(self._on_new_folder_clicked)
+            buttons_layout.addWidget(new_folder_button)
+            
+            # Load existing project button
+            load_project_button = QPushButton("Load Existing Project")
+            load_project_button.clicked.connect(self._on_load_project_clicked)
+            buttons_layout.addWidget(load_project_button)
+            
+            self.verticalLayout.insertLayout(3, buttons_layout)
+            
+    def _on_new_folder_clicked(self):
+        """
+        Handle click on the Select New Folder button.
         
         This method shows the SaveProjectDialog to select a new folder,
-        updates the project's folder_id, and disconnects all connected layers.
+        updates the project's folder_id, and refreshes the dialog.
         """
-        # Show confirmation dialog first
-        result = QMessageBox.question(
-            self,
-            "Change Project Folder",
-            "Changing the project folder will disconnect all layers from MapHub. Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-        
-        if result != QMessageBox.Yes:
-            return
-            
         # Show the folder selection dialog
         save_dialog = SaveProjectDialog(self)
         result = save_dialog.exec_()
@@ -132,27 +258,6 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Get the selected folder_id
         new_folder_id = save_dialog.get_selected_folder_id()
         
-        if new_folder_id == self.folder_id:
-            QMessageBox.information(
-                self,
-                "No Change",
-                "The same folder was selected. No changes were made."
-            )
-            return
-            
-        # Disconnect all connected layers
-        connected_layers = []
-        for layer in QgsProject.instance().mapLayers().values():
-            if layer.customProperty("maphub/map_id") is not None:
-                connected_layers.append(layer)
-
-        sync_manager = MapHubSyncManager(self.iface)
-
-        # Disconnect each layer
-        for i, layer in enumerate(connected_layers):
-            sync_manager.disconnect_layer(layer)
-
-        
         # Update the project's folder_id
         QgsProject.instance().writeEntry("maphub", "folder_id", new_folder_id)
         self.folder_id = new_folder_id
@@ -161,100 +266,78 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         from qgis.utils import plugins
         if 'MapHubPlugin' in plugins:
             asyncio.create_task(plugins['MapHubPlugin'].layer_decorator.update_layer_icons())
-
-
         
         # Clear and rebuild the folder name label
-        # First, remove the existing layout at index 0
-        old_layout = self.verticalLayout.itemAt(0)
-        if old_layout:
-            # Remove all widgets from the layout
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-            # Remove the layout itself
-            self.verticalLayout.removeItem(old_layout)
-            
+        self._clear_header_layouts()
+        
+        # Show the tree widget and buttons
+        self.layersTree.show()
+        self.selectAllButton.show()
+        self.selectNoneButton.show()
+        self.syncButton.show()
+        
         # Add the new folder name label
         self._add_folder_name_label()
         
         # Repopulate the layers tree
         self.populate_layers()
+
+        self.on_select_all_clicked()
+
+    def _on_load_project_clicked(self):
+        """
+        Handle click on the Load Existing Project button.
         
-        QMessageBox.information(
-            self,
-            "Folder Changed",
-            f"Project folder changed successfully. All layers have been disconnected from MapHub."
-        )
-    
-    def _add_folder_name_label(self):
+        This method shows a dialog to select an existing project folder,
+        loads the project, and refreshes the dialog using the same functionality
+        as the MapHub dock drag and drop interaction.
         """
-        Add a label at the top of the dialog showing the folder name and a checkbox
-        to specify whether the project should be saved when synchronizing.
-        Also adds a "Change Folder" button to allow changing the project's folder.
-        """
+        # Create and show the load project dialog
+        load_dialog = LoadProjectDialog(self)
+        result = load_dialog.exec_()
+        
+        if not result:
+            return
+        
+        # Get the selected folder_id
+        folder_id = load_dialog.get_selected_folder_id()
+        
+        if not folder_id:
+            return
+        
+        # Use the same function as the dock widget's drag and drop functionality
+        from ...utils.map_operations import load_and_sync_folder
         try:
-            # Get the folder information using the MapHub client
-            client = get_maphub_client()
-            folder_info = client.folder.get_folder(self.folder_id)
-            folder_name = folder_info['folder'].get('name', 'Unknown Folder')
+            # This function will load the project and synchronize all layers
+            load_and_sync_folder(folder_id, self.iface, self)
             
-            # Create a horizontal layout for the folder name and checkbox
-            folder_layout = QHBoxLayout()
+            # Update the folder_id
+            self.folder_id = folder_id
             
-            # Create a label with the folder name
-            folder_label = QLabel(f"Folder: {folder_name}")
+            # Update layer icons
+            from qgis.utils import plugins
+            if 'MapHubPlugin' in plugins:
+                asyncio.create_task(plugins['MapHubPlugin'].layer_decorator.update_layer_icons())
             
-            # Style the label to make it stand out
-            font = QFont()
-            font.setBold(True)
-            folder_label.setFont(font)
+            # Clear and rebuild the folder name label
+            self._clear_header_layouts()
             
-            # Add the label to the horizontal layout
-            folder_layout.addWidget(folder_label)
+            # Show the tree widget and buttons
+            self.layersTree.show()
+            self.selectAllButton.show()
+            self.selectNoneButton.show()
+            self.syncButton.show()
             
-            # Add a "Change Folder" button
-            change_folder_button = QPushButton("Change Folder")
-            change_folder_button.setToolTip("Change the project's folder (will disconnect all connected layers)")
-            change_folder_button.clicked.connect(self._on_change_folder_clicked)
-            folder_layout.addWidget(change_folder_button)
-            
-            # Add a spacer to push the checkbox to the right
-            folder_layout.addStretch()
-            
-            # Create a checkbox for saving the project
-            save_project_checkbox = QCheckBox("Save project on synchronize")
-            save_project_checkbox.setChecked(self.save_project_on_sync)
-            save_project_checkbox.stateChanged.connect(self._on_save_project_checkbox_changed)
-            folder_layout.addWidget(save_project_checkbox)
-            
-            # Insert the horizontal layout at the top of the dialog
-            self.verticalLayout.insertLayout(0, folder_layout)
+            # Add the new folder name label
+            self._add_folder_name_label()
+
+            self.populate_layers()
+
+            self.on_select_all_clicked()
+
             
         except Exception as e:
-            # If there's an error getting the folder name, just show "Unknown Folder"
-            folder_layout = QHBoxLayout()
-            folder_label = QLabel("Folder: Unknown")
-            folder_layout.addWidget(folder_label)
-            
-            # Add a "Change Folder" button
-            change_folder_button = QPushButton("Change Folder")
-            change_folder_button.setToolTip("Change the project's folder (will disconnect all connected layers)")
-            change_folder_button.clicked.connect(self._on_change_folder_clicked)
-            folder_layout.addWidget(change_folder_button)
-            
-            # Add a spacer to push the checkbox to the right
-            folder_layout.addStretch()
-            
-            # Create a checkbox for saving the project
-            save_project_checkbox = QCheckBox("Save project on synchronize")
-            save_project_checkbox.setChecked(self.save_project_on_sync)
-            save_project_checkbox.stateChanged.connect(self._on_save_project_checkbox_changed)
-            folder_layout.addWidget(save_project_checkbox)
-            
-            # Insert the horizontal layout at the top of the dialog
-            self.verticalLayout.insertLayout(0, folder_layout)
+            ErrorManager.show_error("Failed to load project", e, self)
 
     
     def on_select_all_clicked(self):
@@ -302,9 +385,9 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             QMessageBox.information(
                 self,
                 "No Layers",
-                "There are no layers in the current project."
+                "There are no layers in the current project. You can add layers or load a different project."
             )
-            self.reject()
+            # Don't close the dialog, just return
             return
         
         # Create dictionaries to store layers by status
