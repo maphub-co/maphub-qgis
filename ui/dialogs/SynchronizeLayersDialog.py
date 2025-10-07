@@ -1,7 +1,7 @@
 import asyncio
 import os
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QLabel, QPushButton, QHBoxLayout
 from PyQt5.QtGui import QBrush, QColor, QFont
 from qgis.PyQt import uic
 from qgis.core import QgsProject
@@ -44,6 +44,10 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         self.icon_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
 
         self.folder_id = self._collect_folder_id()
+
+        if not self.folder_id:
+            QTimer.singleShot(0, self.reject)  # schedule reject right after show event
+            return
         
         # Flag to determine if project should be saved on sync
         self.save_project_on_sync = True
@@ -88,7 +92,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             return folder_id
 
         else:
-            raise Exception("You need to select a folder to synchronize layers with MapHub.")
+            return None
             
     def _on_save_project_checkbox_changed(self, state):
         """
