@@ -1,8 +1,7 @@
 import os.path
-import tempfile
 
 from qgis._core import QgsProject
-from qgis.core import Qgis
+from qgis.core import QgsProjectBadLayerHandler, QgsProject
 
 from .utils import get_maphub_client, get_default_download_location
 
@@ -59,6 +58,24 @@ def save_project_to_maphub(folder_id):
     get_maphub_client().folder.put_qgis_project(folder_id, local_path)
 
 
+class MapHubBadLayerHandler(QgsProjectBadLayerHandler):
+    """Custom handler for bad layers that attempts to download them from MapHub"""
+
+    def __init__(self):
+        super().__init__()
+
+    def handleBadLayers(self, layers):
+        """
+        Handle bad layers by attempting to download them from MapHub
+
+        Args:
+            layers: Iterable of QDomNode objects representing bad layers
+        """
+        pass
+
+        # TODO make this handler download missing layer data instead of the fix layers function
+
+
 def load_maphub_project(folder_id):
     base_folder = get_default_download_location()
     project_path = os.path.join(base_folder, f"{folder_id}.qgz")
@@ -68,9 +85,8 @@ def load_maphub_project(folder_id):
 
     # Load the project into QGIS
     project = QgsProject.instance()
-    readflags = Qgis.ProjectReadFlags()
-    readflags |= Qgis.ProjectReadFlag.DontResolveLayers
-    project.read(project_path, readflags)
+    project.setBadLayerHandler(MapHubBadLayerHandler())
+    project.read(project_path)
 
     # Set the project title to the folder name.
     folder_info = get_maphub_client().folder.get_folder(folder_id)["folder"]
