@@ -432,6 +432,19 @@ class MapHubPlugin(QObject):
         # Update browser dock if available
         if self.map_browser_dock:
             self.map_browser_dock.refresh_browser()
+
+    async def refresh_status_async(self):
+        """Refresh all MapHub status icons and browser items async."""
+
+        tasks = []
+
+        if self.layer_decorator:
+            tasks.append(self.layer_decorator.update_layer_icons())
+
+        if self.map_browser_dock:
+            tasks.append(asyncio.to_thread(self.map_browser_dock.refresh_browser))
+
+        await asyncio.gather(*tasks)
             
     def eventFilter(self, obj, event):
         """

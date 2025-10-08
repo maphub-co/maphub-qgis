@@ -264,9 +264,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         self.folder_id = new_folder_id
         
         # Update layer icons - use the existing decorator from the plugin instance
-        from qgis.utils import plugins
-        if 'MapHubPlugin' in plugins:
-            asyncio.create_task(plugins['MapHubPlugin'].layer_decorator.update_layer_icons())
+        if 'maphub' in plugins:
+            asyncio.create_task(plugins['maphub'].layer_decorator.update_layer_icons())
         
         # Clear and rebuild the folder name label
         self._clear_header_layouts()
@@ -316,9 +315,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             self.folder_id = folder_id
             
             # Update layer icons
-            from qgis.utils import plugins
-            if 'MapHubPlugin' in plugins:
-                asyncio.create_task(plugins['MapHubPlugin'].layer_decorator.update_layer_icons())
+            if 'maphub' in plugins:
+                asyncio.create_task(plugins['maphub'].layer_decorator.update_layer_icons())
             
             # Clear and rebuild the folder name label
             self._clear_header_layouts()
@@ -676,6 +674,10 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                     "Project Saved",
                     "No layers were selected for synchronization, but the project was saved."
                 )
+
+                if 'maphub' in plugins:
+                    asyncio.create_task(plugins['maphub'].refresh_status_async())
+
                 self.accept()
                 return
             else:
@@ -752,10 +754,8 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             message
         )
 
-        # Update layer icons - use the existing decorator from the plugin instance
-        # This prevents creating multiple decorators that might add duplicate indicators
-        layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
-        asyncio.create_task(layer_decorator.update_layer_icons())
+        if 'maphub' in plugins:
+            asyncio.create_task(plugins['maphub'].refresh_status_async())
 
         # Close dialog
         self.accept()
