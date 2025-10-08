@@ -11,7 +11,8 @@ from ...utils.map_operations import download_map, add_map_as_tiling_service, add
 from ...utils.sync_manager import MapHubSyncManager
 from ...utils.project_utils import get_project_folder_id
 from .MapItemDelegate import MapItemDelegate, STATUS_INDICATOR_ROLE, PROJECT_FOLDER_ROLE
-from ...utils.error_manager import handled_exceptions
+from ...utils.error_manager import handled_exceptions, ensure_api_key
+from ...ui.dialogs.SynchronizeLayersDialog import SynchronizeLayersDialog
 
 
 class WorkspacesLoader(QThread):
@@ -245,10 +246,16 @@ class MapBrowserDockWidget(QDockWidget):
         
         # Create refresh button
         self.refresh_button = QToolButton()
-        self.refresh_button.setIcon(QIcon(os.path.join(self.icon_dir, 'refresh.svg')))
-        self.refresh_button.setToolTip("Refresh browser and sync status")
+        self.refresh_button.setText("Refresh")
         self.refresh_button.clicked.connect(self.on_refresh_clicked)
         self.top_layout.addWidget(self.refresh_button)
+
+        # Create sync button
+        self.sync_button = QToolButton()
+        self.sync_button.setIcon(QIcon(os.path.join(self.icon_dir, 'refresh.svg')))
+        self.sync_button.setToolTip("Refresh browser and sync status")
+        self.sync_button.clicked.connect(self.on_synchronize_layers_clicked)
+        self.top_layout.addWidget(self.sync_button)
         
         # Add top bar to main layout
         self.main_layout.addWidget(self.top_bar)
@@ -1486,3 +1493,10 @@ class MapBrowserDockWidget(QDockWidget):
         # Call the refresh callback if provided
         if self.refresh_callback:
             self.refresh_callback()
+
+    @handled_exceptions
+    def on_synchronize_layers_clicked(self, checked=False):
+        """Synchronize layers with MapHub."""
+        # Create and show the synchronization dialog
+        dialog = SynchronizeLayersDialog(self.iface, self.iface.mainWindow())
+        dialog.exec_()
