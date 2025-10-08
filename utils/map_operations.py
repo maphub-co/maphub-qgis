@@ -325,9 +325,7 @@ def load_and_sync_folder(folder_id: str, iface, parent=None) -> None:
     try:
         load_maphub_project(folder_id)
     except Exception as e:
-        iface.messageBar().pushSuccess("MapHub", f"Folder has no associated project. Downloading maps of folder instead.")
-
-        download_folder_maps(folder_id)
+        iface.messageBar().pushWarning("MapHub", f"Folder has no associated project. Download maps of folder instead.")
         return
     
     # Create a progress dialog
