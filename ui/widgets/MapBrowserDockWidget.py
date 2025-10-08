@@ -70,19 +70,19 @@ class FolderContentLoader(QThread):
 
 class FolderProjectStatusLoader(QThread):
     """Thread for loading folder project status."""
-    status_loaded = pyqtSignal(object, bool)  # folder_item, is_project
+    status_loaded = pyqtSignal(str, bool)  # folder_id, is_project
     error_occurred = pyqtSignal(str)  # error message
 
     def __init__(self, folder_item, folder_id):
         super().__init__()
-        self.folder_item = folder_item
+        # Store only the folder_id, not the folder_item reference
         self.folder_id = folder_id
 
     def run(self):
         try:
             client = get_maphub_client()
             is_project = client.folder.get_is_project(self.folder_id)
-            self.status_loaded.emit(self.folder_item, is_project)
+            self.status_loaded.emit(self.folder_id, is_project)
         except Exception as e:
             self.error_occurred.emit(str(e))
 
@@ -296,6 +296,36 @@ class MapBrowserDockWidget(QDockWidget):
         # Highlight the project folder after workspaces are loaded
         QTimer.singleShot(1000, self.highlight_project_folder)
 
+    def cancel_threads_for_item(self, item):
+        """
+        Cancel any threads related to the given item.
+        
+        Args:
+            item: The item being removed
+        """
+        try:
+            item_data = item.data(0, Qt.UserRole)
+            if not item_data:
+                return
+                
+            item_id = item_data.get('id')
+            if not item_id:
+                return
+                
+            # Find and cancel any threads related to this item
+            for loader in self.content_loaders[:]:
+                if hasattr(loader, 'folder_id') and loader.folder_id == item_id:
+                    if loader.isRunning():
+                        loader.terminate()
+                        loader.wait()
+                    self.content_loaders.remove(loader)
+        except RuntimeError:
+            # Item is already invalid, just clean up any running threads
+            self.logger.debug("Attempted to cancel threads for an invalid item")
+            for loader in self.content_loaders[:]:
+                if not loader.isRunning():
+                    self.content_loaders.remove(loader)
+    
     def closeEvent(self, event):
         """Handle close event, clean up resources."""
         # Cancel any running threads
@@ -443,6 +473,7 @@ class MapBrowserDockWidget(QDockWidget):
 
         # Remove the placeholder item if it exists
         if parent_item.childCount() > 0 and parent_item.child(0).data(0, Qt.UserRole) and parent_item.child(0).data(0, Qt.UserRole).get('type') == 'placeholder':
+            # No need to cancel threads for placeholder items as they don't have associated threads
             parent_item.removeChild(parent_item.child(0))
             
         # Get lists of existing folder and map IDs to track what's been removed
@@ -488,7 +519,8 @@ class MapBrowserDockWidget(QDockWidget):
                     expanded_folder_ids[item_id] = child.isExpanded()
                     i += 1
                 else:
-                    # Folder no longer exists, remove it
+                    # Folder no longer exists, cancel any threads and remove it
+                    self.cancel_threads_for_item(child)
                     parent_item.removeChild(child)
                     # Don't increment i since we removed an item
             elif item_type == 'map':
@@ -497,7 +529,8 @@ class MapBrowserDockWidget(QDockWidget):
                     existing_map_ids.append(item_id)
                     i += 1
                 else:
-                    # Map no longer exists, remove it
+                    # Map no longer exists, cancel any threads and remove it
+                    self.cancel_threads_for_item(child)
                     parent_item.removeChild(child)
                     # Don't increment i since we removed an item
             else:
@@ -646,27 +679,84 @@ class MapBrowserDockWidget(QDockWidget):
                 # Get the parent of the parent_item (the container that holds this folder)
                 container = parent_item.parent()
                 if container:
+                    # Cancel any threads associated with this item before removing it
+                    self.cancel_threads_for_item(parent_item)
                     # Remove the folder item from its container
                     container.removeChild(parent_item)
         else:
             # For other errors, show the error message
             QMessageBox.critical(self, "Error Loading Content", f"An error occurred while loading content: {error_message}")
             
-    def on_folder_project_status_loaded(self, folder_item, is_project):
+    def _find_folder_item_by_id(self, folder_id):
+        """
+        Find a folder item by its ID.
+        
+        Args:
+            folder_id (str): The ID of the folder to find
+            
+        Returns:
+            SortableTreeWidgetItem: The found item, or None if not found
+        """
+        def search_recursive(parent_item):
+            # Check all children of the parent item
+            for i in range(parent_item.childCount()):
+                try:
+                    child = parent_item.child(i)
+                    item_data = child.data(0, Qt.UserRole)
+                    if item_data and item_data.get('type') == 'folder' and item_data.get('id') == folder_id:
+                        return child
+                    
+                    # Recursively search this child's children
+                    if child.childCount() > 0:
+                        result = search_recursive(child)
+                        if result:
+                            return result
+                except RuntimeError:
+                    # Skip items that have been deleted
+                    self.logger.debug(f"Skipping deleted item during folder search")
+                    continue
+            return None
+        
+        # Start search from root items
+        for i in range(self.tree_widget.topLevelItemCount()):
+            try:
+                root_item = self.tree_widget.topLevelItem(i)
+                result = search_recursive(root_item)
+                if result:
+                    return result
+            except RuntimeError:
+                # Skip items that have been deleted
+                self.logger.debug(f"Skipping deleted root item during folder search")
+                continue
+        
+        return None
+        
+    def on_folder_project_status_loaded(self, folder_id, is_project):
         """Handle folder project status loaded signal."""
         # Remove the loader thread from the list
         for loader in self.content_loaders[:]:
             if not loader.isRunning():
                 self.content_loaders.remove(loader)
 
+        # Find the folder item by ID
+        folder_item = self._find_folder_item_by_id(folder_id)
+        if not folder_item:
+            self.logger.debug(f"Folder item with ID {folder_id} not found - may have been deleted")
+            return
+
         # Update the folder icon based on project status
-        if is_project:
-            if folder_item.data(0, Qt.UserRole)['id'] == get_project_folder_id():
-                folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'project_active.svg')))
+        try:
+            if is_project:
+                if folder_id == get_project_folder_id():
+                    folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'project_active.svg')))
+                else:
+                    folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'project.svg')))
             else:
-                folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'project.svg')))
-        else:
-            folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'folder.svg')))
+                folder_item.setIcon(0, QIcon(os.path.join(self.icon_dir, 'folder.svg')))
+        except RuntimeError:
+            # Item became invalid between finding it and using it
+            self.logger.debug(f"Folder item with ID {folder_id} became invalid during update")
+            return
 
     def show_context_menu(self, position):
         """Show context menu for the selected item."""
