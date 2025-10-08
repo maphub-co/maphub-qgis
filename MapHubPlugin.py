@@ -413,7 +413,7 @@ class MapHubPlugin(QObject):
     def apply_scheduler_settings(self):
         """Apply scheduler settings from QSettings."""
         settings = QSettings()
-        enable_periodic = settings.value("MapHubPlugin/enable_periodic_updates", True, type=bool)
+        enable_periodic = settings.value("MapHubPlugin/enable_periodic_updates", False, type=bool)
         update_interval = settings.value("MapHubPlugin/update_interval", 5, type=int)
         
         if enable_periodic and self.status_update_scheduler:
