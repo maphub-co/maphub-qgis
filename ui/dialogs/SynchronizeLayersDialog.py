@@ -394,6 +394,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         download_layers = []  # remote_newer, style_changed_remote
         upload_layers = []    # local_modified, style_changed_local, style_changed_both
         not_connected_layers = []
+        tiling_layers = []
         in_sync_layers = []   # in_sync, file_missing, remote_error, processing
         
         # Categorize layers by status
@@ -401,7 +402,19 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             is_connected = layer.customProperty("maphub/map_id") is not None
             
             if not is_connected:
-                not_connected_layers.append(layer)
+                # Get the layer file path
+                layer_path = layer.source()
+                if '|' in layer_path:  # Handle layers with query parameters
+                    layer_path = layer_path.split('|')[0]
+
+                # Determine if it's a file-based layer or a database layer
+                is_file_based = os.path.exists(layer_path)
+
+                if is_file_based:
+                    not_connected_layers.append(layer)
+                else:
+                    tiling_layers.append(layer)
+
                 continue
             
             status = self.sync_manager.get_layer_sync_status(layer)
@@ -445,6 +458,12 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 "layers": in_sync_layers,
                 "color": QColor(211, 211, 211),  # Light gray
                 "expanded": False
+            },
+            {
+                "title": "TILING LAYERS (No Action needed)",
+                "layers": tiling_layers,
+                "color": QColor(211, 211, 211),  # Light gray
+                "expanded": False
             }
         ]
         
@@ -479,10 +498,13 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             group_item.setExpanded(group["expanded"])
             
             # Add child items
-            if group["title"] == "LAYERS TO CONNECT (Will be uploaded to MapHub)":
+            if "LAYERS TO CONNECT" in group["title"]:
                 # Handle not connected layers
                 for layer in group["layers"]:
                     self._add_not_connected_layer(group_item, layer)
+            elif "TILING LAYERS" in group["title"]:
+                for layer in group["layers"]:
+                    self._add_tiling_layer(group_item, layer)
             else:
                 # Handle connected layers
                 for layer, status in group["layers"]:
@@ -558,6 +580,30 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         # Force update to make checkbox visible
         item.setSelected(False)
         
+        # Store layer reference
+        item.setData(0, Qt.UserRole, layer)
+
+    def _add_tiling_layer(self, parent_item, layer):
+        """Add a tiling layer to the tree under the specified parent item."""
+        item = QTreeWidgetItem(parent_item)
+        item.setText(0, layer.name())
+
+        # Gray out the text but not as much as before
+        for col in range(3):
+            item.setForeground(col, QBrush(QColor(80, 80, 80)))  # Darker than before to be more readable
+
+        # Add "Will Connect" text in the action column
+        item.setText(1, "Tiling is in Sync")
+
+        # Add enabled checkbox
+        # checkbox = QCheckBox()
+        # checkbox.setEnabled(False)  # Enable the checkbox
+        # checkbox.setChecked(False)  # Unchecked by default
+        # self.layersTree.setItemWidget(item, 2, checkbox)
+
+        # Force update to make checkbox visible
+        # item.setSelected(False)
+
         # Store layer reference
         item.setData(0, Qt.UserRole, layer)
     
