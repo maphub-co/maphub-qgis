@@ -1,16 +1,17 @@
 import asyncio
 import os
-from PyQt5.QtCore import Qt, QSize, QTimer
+
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QLabel, QPushButton, QHBoxLayout, QFrame
 from PyQt5.QtGui import QBrush, QColor, QFont
 from qgis.PyQt import uic
 from qgis.core import QgsProject
+from qgis.utils import plugins
 
 from .MapHubBaseDialog import MapHubBaseDialog
-from .UploadMapDialog import UploadMapDialog
 from ...utils.sync_manager import MapHubSyncManager
 from ...utils.status_icon_manager import StatusIconManager
-from ...utils.project_utils import get_project_folder_id, save_project_to_maphub, load_maphub_project
+from ...utils.project_utils import get_project_folder_id, save_project_to_maphub
 from ...utils.utils import get_maphub_client
 from .SaveProjectDialog import SaveProjectDialog
 from .LoadProjectDialog import LoadProjectDialog
@@ -627,7 +628,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 item.setToolTip(column, tooltip)
 
     def on_sync_clicked(self):
-        """Handle click on the Synchronize Selected button."""
+        """Handle click on the Synchronize button."""
         # Get selected layers with their synchronization directions
         selected_items = []
         selected_not_connected = []
@@ -731,12 +732,7 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
         
         # Close progress dialog
         progress.accept()
-        
-        # Update layer icons - use the existing decorator from the plugin instance
-        # This prevents creating multiple decorators that might add duplicate indicators
-        layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
-        asyncio.create_task(layer_decorator.update_layer_icons())
-        
+
         # Show success message
         if connect_count > 0 and success_count > 0:
             message = f"Successfully connected {connect_count} layer(s) and synchronized {success_count} layer(s)."
@@ -755,6 +751,11 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
             "Operation Complete",
             message
         )
-        
+
+        # Update layer icons - use the existing decorator from the plugin instance
+        # This prevents creating multiple decorators that might add duplicate indicators
+        layer_decorator = MapHubLayerDecorator.get_instance(self.iface)
+        asyncio.create_task(layer_decorator.update_layer_icons())
+
         # Close dialog
         self.accept()

@@ -92,7 +92,7 @@
      <item>
       <widget class="QPushButton" name="syncButton">
        <property name="text">
-        <string>Synchronize Selected</string>
+        <string>Synchronize</string>
        </property>
       </widget>
      </item>
