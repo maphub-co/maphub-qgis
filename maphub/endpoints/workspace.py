@@ -26,4 +26,6 @@ class WorkspaceEndpoint(BaseEndpoint):
             endpoint.
         :rtype: Dict[str, Any]
         """
-        return self._make_request("GET", "/workspaces").json()
+        workspaces = self._make_request("GET", "/workspaces").json()
+
+        return [workspace for workspace in workspaces if workspace.get('name') != "Personal Workspace"]
