@@ -302,8 +302,9 @@ class MapHubSyncManager:
                     
                     self.iface.messageBar().pushSuccess("MapHub", f"Style for layer '{layer.name()}' successfully uploaded to MapHub.")
                 else:
-                    # Upload local changes to MapHub (full file upload)
-                    local_path = layer.customProperty("maphub/local_path")
+                    local_path = layer.source()
+                    if '|' in local_path:  # Handle layers with query parameters
+                        local_path = local_path.split('|')[0]
                     
                     # Get the current layer position and add it to the style
                     project = QgsProject.instance()
@@ -356,10 +357,7 @@ class MapHubSyncManager:
                             with open(local_path, 'rb') as src_file:
                                 with open(new_path, 'wb') as dst_file:
                                     dst_file.write(src_file.read())
-                            
-                            # Update the layer's source path
-                            layer.setCustomProperty("maphub/local_path", new_path)
-                            
+
                             # For shapefiles, copy all related files and delete old ones
                             if file_extension.lower() == '.shp':
                                 base_name = os.path.splitext(local_path)[0]
@@ -718,7 +716,6 @@ class MapHubSyncManager:
         layer.setCustomProperty("maphub/map_id", str(map_id))
         layer.setCustomProperty("maphub/folder_id", str(folder_id))
         layer.setCustomProperty("maphub/last_sync", datetime.now().isoformat())
-        layer.setCustomProperty("maphub/local_path", local_path)
 
         if version_id:
             layer.setCustomProperty("maphub/last_version_id", str(version_id))
@@ -770,7 +767,6 @@ class MapHubSyncManager:
         layer.removeCustomProperty("maphub/folder_id")
         layer.removeCustomProperty("maphub/workspace_id")
         layer.removeCustomProperty("maphub/last_sync")
-        layer.removeCustomProperty("maphub/local_path")
         layer.removeCustomProperty("maphub/last_style_hash")
         layer.removeCustomProperty("maphub/last_version_id")
         
