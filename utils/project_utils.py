@@ -44,15 +44,26 @@ def save_project_to_maphub(folder_id):
 
     # Check if the project has been saved
     if project.fileName() == "":
+        # Project has never been saved
         base_folder = get_default_download_location()
         local_path = os.path.join(base_folder, f"{folder_id}.qgz")
-
+        
         # Save the project to the temporary file
         project.write(local_path)
     else:
-        # Save the project to its current location
-        local_path = project.fileName()
-        project.write()
+        # Check if the project is stored remotely (e.g., in a PostgreSQL database)
+        file_name = project.fileName()
+        if file_name.startswith(('postgresql:', 'mysql:', 'oracle:', 'mssql:')) or not os.path.exists(file_name):
+            # Project is stored remotely, save to a temporary file
+            base_folder = get_default_download_location()
+            local_path = os.path.join(base_folder, f"{folder_id}.qgz")
+            
+            # Save the project to the temporary file
+            project.write(local_path)
+        else:
+            # Project is stored locally, save to its current location
+            local_path = file_name
+            project.write()
 
     # Upload the project to MapHub
     get_maphub_client().folder.put_qgis_project(folder_id, local_path)

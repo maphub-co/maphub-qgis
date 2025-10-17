@@ -82,8 +82,9 @@ class MapsEndpoint(BaseEndpoint):
         """
         Uploads a map to the server.
 
-        If the path points to a .shp file, all related files (with the same base name but different
-        extensions like .dbf, .shx, .prj, etc.) will be zipped together and the zip file will be uploaded.
+        If the path points to any shapefile-related file (.shp, .dbf, .shx, .prj, etc.), all related files 
+        (with the same base name but different extensions) will be zipped together and the zip file will be uploaded.
+        The method checks that all required shapefile components (.shp, .dbf, .shx) are present before uploading.
 
         :param map_name: The name of the map to be uploaded.
         :type map_name: str
@@ -94,6 +95,7 @@ class MapsEndpoint(BaseEndpoint):
         :param path: The file path to the map data to be uploaded.
         :type path: str
         :return: The response returned from the server after processing the map upload request.
+        :raises ValueError: If required shapefile components are missing.
         """
         if folder_id is None:
             raise ValueError("folder_id must be provided")
@@ -106,22 +108,41 @@ class MapsEndpoint(BaseEndpoint):
             # "vector_lod": 8,
         }
 
-        # Check if the file is a shapefile (.shp)
-        if path.lower().endswith('.shp'):
+        # Check if the file is any shapefile-related file (.shp, .dbf, .shx, .prj, etc.)
+        file_ext = os.path.splitext(path.lower())[1]
+        if file_ext in ['.shp', '.dbf', '.shx', '.prj', '.qpj', '.cpg']:
             # Create a temporary zip file
             with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_zip_file:
                 temp_zip_path = temp_zip_file.name
 
             try:
-                # Get the directory and base name of the shapefile
-                shapefile_path = Path(path)
-                shapefile_dir = shapefile_path.parent
-                shapefile_base = shapefile_path.stem
+                # Get the directory and base name of the file
+                file_path = Path(path)
+                file_dir = file_path.parent
+                file_base = file_path.stem
+
+                # Check if all required shapefile components exist
+                required_extensions = ['.shp', '.dbf', '.shx']
+                missing_extensions = []
+                
+                for ext in required_extensions:
+                    if not (file_dir / f"{file_base}{ext}").exists():
+                        print(file_dir / f"{file_base}{ext}")
+                        missing_extensions.append(ext)
+                
+                if missing_extensions:
+                    raise ValueError(f"Missing required shapefile components: {', '.join(missing_extensions)}. "
+                                     f"A valid shapefile must include .shp, .dbf, and .shx files.")
 
                 # Create a zip file containing all related files
                 with zipfile.ZipFile(temp_zip_path, 'w') as zipf:
                     # Find all files with the same base name in the directory
-                    for file in shapefile_dir.glob(f"{shapefile_base}.*"):
+                    found_files = list(file_dir.glob(f"{file_base}.*"))
+                    
+                    if not found_files:
+                        raise ValueError(f"No files found with base name '{file_base}'")
+                    
+                    for file in found_files:
                         # Add the file to the zip with just the filename (no directory path)
                         zipf.write(file, file.name)
 

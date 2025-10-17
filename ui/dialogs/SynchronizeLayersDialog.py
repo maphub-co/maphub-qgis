@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import QTreeWidgetItem, QCheckBox, QHeaderView, QMessageBox, QComboBox, QLabel, QPushButton, QHBoxLayout, QFrame
 from PyQt5.QtGui import QBrush, QColor, QFont
 from qgis.PyQt import uic
+from qgis._core import QgsVectorLayer
 from qgis.core import QgsProject
 from qgis.utils import plugins
 
@@ -412,7 +413,10 @@ class SynchronizeLayersDialog(MapHubBaseDialog, FORM_CLASS):
                 if is_file_based:
                     not_connected_layers.append(layer)
                 else:
-                    tiling_layers.append(layer)
+                    if isinstance(layer, QgsVectorLayer):
+                        not_connected_layers.append(layer)
+                    else:
+                        tiling_layers.append(layer)
 
                 continue
             

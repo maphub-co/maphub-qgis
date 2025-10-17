@@ -445,7 +445,7 @@ class MapHubSyncManager:
                 raise Exception("Unsupported layer type.")
 
             # Handle the layer based on its type and source
-            if isinstance(layer, QgsVectorLayer) and (not is_file_based or file_extension.lower() in ['.gpkg', '.gdb']):
+            if isinstance(layer, QgsVectorLayer):
                 # For database layers (like PostGIS), export to file format
 
                 # Always use FlatGeobuf as requested
@@ -497,23 +497,13 @@ class MapHubSyncManager:
                             f"Some fields were excluded during export due to compatibility issues: {skipped_fields_str}"
                         )
 
-            elif is_file_based:
+            elif  isinstance(layer, QgsRasterLayer):
                 temp_file = os.path.join(temp_dir, f"{map_name}{file_extension}")
 
                 # For file-based layers, copy the file
                 with open(layer_path, 'rb') as src_file:
                     with open(temp_file, 'wb') as dst_file:
                         dst_file.write(src_file.read())
-
-                # For shapefiles, copy all related files
-                if file_extension.lower() == '.shp':
-                    base_name = os.path.splitext(layer_path)[0]
-                    for ext in ['.dbf', '.shx', '.prj', '.qpj', '.cpg']:
-                        related_file = f"{base_name}{ext}"
-                        if os.path.exists(related_file):
-                            with open(related_file, 'rb') as src_file:
-                                with open(os.path.join(temp_dir, f"{map_name}{ext}"), 'wb') as dst_file:
-                                    dst_file.write(src_file.read())
             else:
                 # For memory layers or other non-file layers that aren't handled above
                 raise Exception("Layer is not file-based and couldn't be exported. Please save it to a file first.")
@@ -562,17 +552,6 @@ class MapHubSyncManager:
                     with open(permanent_path, 'wb') as dst_file:
                         dst_file.write(src_file.read())
 
-                # For shapefiles, copy all related files
-                if file_extension.lower() == '.shp':
-                    temp_base_name = os.path.splitext(temp_file)[0]
-                    perm_base_name = os.path.splitext(permanent_path)[0]
-                    for ext in ['.dbf', '.shx', '.prj', '.qpj', '.cpg']:
-                        related_file = f"{temp_base_name}{ext}"
-                        if os.path.exists(related_file):
-                            with open(related_file, 'rb') as src_file:
-                                with open(f"{perm_base_name}{ext}", 'wb') as dst_file:
-                                    dst_file.write(src_file.read())
-
                 # Create a new layer with the permanent path
                 if isinstance(layer, QgsVectorLayer):
                     new_layer = QgsVectorLayer(permanent_path, layer.name(), "ogr")
@@ -597,7 +576,6 @@ class MapHubSyncManager:
                     permanent_path,
                     version_id
                 )
-
 
                 # Remove the old layer and add the new one
                 QgsProject.instance().removeMapLayer(layer.id())
